@@ -1,0 +1,21 @@
+# Build artifacts
+build/
+bin/
+obj/
+*.elf
+*.uf2
+*.bin
+*.map
+
+# Tools and SDK temp files
+/tools/picotool/picotool-build/
+/tools/picotool/picotool-src/
+
+# VS Code / IDE settings
+.vscode/
+.cmake/
+CMakeSettings.json
+
+# OS files
+Thumbs.db
+.DS_Store
