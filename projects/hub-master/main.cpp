@@ -1,21 +1,24 @@
-#include <stdio.h>
 #include "pico/stdlib.h"
+#include "FreeRTOS.h"
+#include "task.h"
 
-int main() {
-    // Initialize all standard I/O (this enables the USB serial)
-    stdio_init_all();
-
+void blink_task(void *pvParameters) {
     const uint LED_PIN = 0;
     gpio_init(LED_PIN);
     gpio_set_dir(LED_PIN, GPIO_OUT);
 
-    while (true) {
+    for(;;) {
         gpio_put(LED_PIN, 1);
-        printf("LED ON\n");
-        sleep_ms(250);
-
+        vTaskDelay(pdMS_TO_TICKS(500));
         gpio_put(LED_PIN, 0);
-        printf("LED OFF\n");
-        sleep_ms(250);
+        vTaskDelay(pdMS_TO_TICKS(500));
     }
+}
+
+int main() {
+    // Skip stdio_init_all() for a moment to test the pure scheduler
+    xTaskCreate(blink_task, "Blink", 256, NULL, 1, NULL);
+    vTaskStartScheduler();
+    
+    while(1); 
 }

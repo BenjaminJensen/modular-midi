@@ -10,6 +10,9 @@ To build and debug this project, you will need the following tools installed:
 - **cortex-debug**: A Visual Studio Code extension that provides debugging support for ARM Cortex-M microcontrollers.
 - **blackmagic-probe**: An open-source JTAG/SWD debugging tool for ARM microcontrollers.
 
+## FreeRTOS
+As of now 30th March 2026, the official version of FreeRTOS does not support the RP2350, therefore the submodule is to the raspberrypi maintained of FreeRTOS
+
 ## Cortex-Debug Setup
 
 The project uses the `cortex-debug` VS Code extension to interface with the Black Magic Probe. 
