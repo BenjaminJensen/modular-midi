@@ -1,0 +1,39 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "BMP Attach",
+            "type": "cortex-debug",
+            "servertype": "bmp",
+            "request": "attach",
+            "cwd": "${workspaceRoot}",
+            "executable": "${workspaceRoot}/build/hub_master.elf", // replace with your executable
+            "showDevDebugOutput": "raw",
+            "interface": "swd",
+            "device": "RP2350_M33_0",
+            "BMPGDBSerialPort": "COM5", // Use whatever serial port makes sense for your OS and BMP setup
+            "runToEntryPoint": "main",
+        },
+        {
+            "name": "BMP Debug",
+            "type": "cortex-debug",
+            "servertype": "bmp",
+            "request": "launch",
+            "cwd": "${workspaceRoot}",
+            "executable": "${workspaceRoot}/build/hub_master.elf", // replace with your executable
+            //"preLaunchTask": "Build STM", // using stm32-for-vscode extension, this is the build task
+            "postStartSessionCommands": [
+                "monitor rtt enable",
+                "monitor rtt"
+            ],
+            "interface": "swd",
+            "device": "RP2350_M33_0",
+            "BMPGDBSerialPort": "COM5", // Use whatever serial port makes sense for your OS and BMP setup
+            "runToEntryPoint": "main", // runToMain is deprecated.
+            "svdFile": "${workspaceFolder}/libs/pico-sdk/src/rp2350/hardware_regs/rp2350.svd"
+        }
+    ]
+}

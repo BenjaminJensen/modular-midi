@@ -12,7 +12,7 @@ obj/
 /tools/picotool/picotool-src/
 
 # VS Code / IDE settings
-.vscode/
+#.vscode/
 .cmake/
 CMakeSettings.json
 
