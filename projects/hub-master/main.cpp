@@ -22,7 +22,17 @@ int main() {
     stdio_init_all();
     
     // Skip stdio_init_all() for a moment to test the pure scheduler
-    xTaskCreate(blink_task, "Blink", 256, NULL, 1, NULL);
+    //xTaskCreate(blink_task, "Blink", 256, NULL, 1, NULL);
+    // Create the task and pin it strictly to Core 0
+    xTaskCreateAffinitySet(
+        blink_task,    // Function
+        "Blink",       // Name
+        256,           // Stack size
+        NULL,          // Parameters
+        1,             // Priority
+        (1 << 0),      // Affinity Mask: 1 means Core 0 only
+        NULL           // Task Handle
+    );
     vTaskStartScheduler();
     
     while(1); 
