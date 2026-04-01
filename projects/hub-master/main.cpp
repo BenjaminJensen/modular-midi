@@ -1,6 +1,7 @@
 #include "pico/stdlib.h"
 #include "FreeRTOS.h"
 #include "task.h"
+#include <cstdio>
 
 void blink_task(void *pvParameters) {
     const uint LED_PIN = 0;
@@ -8,6 +9,7 @@ void blink_task(void *pvParameters) {
     gpio_set_dir(LED_PIN, GPIO_OUT);
 
     for(;;) {
+        printf("Blinking LED\n");
         gpio_put(LED_PIN, 1);
         vTaskDelay(pdMS_TO_TICKS(500));
         gpio_put(LED_PIN, 0);
@@ -16,6 +18,9 @@ void blink_task(void *pvParameters) {
 }
 
 int main() {
+    // This now wakes up the RTT driver instead of USB/UART
+    stdio_init_all();
+    
     // Skip stdio_init_all() for a moment to test the pure scheduler
     xTaskCreate(blink_task, "Blink", 256, NULL, 1, NULL);
     vTaskStartScheduler();

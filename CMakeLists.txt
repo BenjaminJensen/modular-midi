@@ -30,9 +30,17 @@ target_include_directories(hub_master PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/shared
 )
 
+# 1. Enable the RTT driver in the SDK
+pico_enable_stdio_rtt(hub_master 1)
+
+# 2. Disable others to prevent resource conflicts
+pico_enable_stdio_usb(hub_master 0)
+pico_enable_stdio_uart(hub_master 0)
+
 # 7. Link the actual libraries
 target_link_libraries(hub_master 
     pico_stdlib 
+    pico_stdio_rtt
     FreeRTOS-Kernel-Heap4
 )
 
