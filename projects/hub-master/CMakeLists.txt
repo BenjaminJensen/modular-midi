@@ -1,1 +1,28 @@
-# TODO. Segment CMake filses into root and subdirectories for hub and satellite. This keeps the build clean and separate.
+# CMake build instructions for the hub-master sub-project
+
+# Define the executable and its source files
+add_executable(hub_master 
+    main.cpp
+)
+
+# Add include directories (where your headers live)
+target_include_directories(hub_master PRIVATE 
+    ${CMAKE_CURRENT_LIST_DIR}
+)
+
+# Enable the RTT driver in the SDK and disable others
+pico_enable_stdio_rtt(hub_master 1)
+pico_enable_stdio_usb(hub_master 0)
+pico_enable_stdio_uart(hub_master 0)
+
+# Link the actual libraries, including the shared interface library
+target_link_libraries(hub_master PRIVATE
+    pico_stdlib 
+    pico_stdio_rtt
+    FreeRTOS-Kernel-Heap4
+    shared
+    pico_multicore
+)
+
+# Create ELF, UF2, etc.
+pico_add_extra_outputs(hub_master)

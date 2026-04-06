@@ -3,6 +3,10 @@
 #include "FreeRTOS.h"
 #include "task.h"
 #include <cstdio>
+#include "st7789.h"
+
+// Statically instantiate the display using the default pins defined in the header
+static ST7789 display;
 
 void blink_task(void *pvParameters) {
     const uint LED_PIN = 0;
@@ -27,6 +31,10 @@ void display_task(void) {
     gpio_init(LED_PIN);
     gpio_set_dir(LED_PIN, GPIO_OUT);
 
+    // Initialize the statically allocated display
+    display.init();
+    display.display_on();
+
     for(;;) {
         gpio_put(LED_PIN, 1);
         busy_wait_ms(250);
@@ -37,6 +45,7 @@ void display_task(void) {
 
 int main() {
     // This now wakes up the RTT driver instead of USB/UART
+
     stdio_init_all();
     
     // Create the task and pin it strictly to Core 0
