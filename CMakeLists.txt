@@ -9,8 +9,6 @@ project(freertos-sample C CXX ASM)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
 
-add_compile_definitions(PICO_FREERTOS_LIB_SMP=1)
-
 # Initialize the SDK
 pico_sdk_init()
 
