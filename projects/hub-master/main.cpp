@@ -17,22 +17,23 @@ void blink_task(void *pvParameters) {
     }
 }
 
+void display_task(void *pvParameters) {
+
+    for(;;) {
+        printf("Displaying message\n");
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
+}
+
 int main() {
     // This now wakes up the RTT driver instead of USB/UART
     stdio_init_all();
     
-    // Skip stdio_init_all() for a moment to test the pure scheduler
-    //xTaskCreate(blink_task, "Blink", 256, NULL, 1, NULL);
     // Create the task and pin it strictly to Core 0
-    xTaskCreateAffinitySet(
-        blink_task,    // Function
-        "Blink",       // Name
-        256,           // Stack size
-        NULL,          // Parameters
-        1,             // Priority
-        (1 << 0),      // Affinity Mask: 1 means Core 0 only
-        NULL           // Task Handle
-    );
+    xTaskCreate(blink_task, "Blink", 256, NULL, 1, NULL);
+    
+    // Task for Core 0 (MIDI - High Priority)
+ 
     vTaskStartScheduler();
     
     while(1); 
