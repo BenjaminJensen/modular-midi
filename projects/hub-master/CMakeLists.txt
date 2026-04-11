@@ -10,15 +10,13 @@ target_include_directories(hub_master PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}
 )
 
-# Enable the RTT driver in the SDK and disable others
-pico_enable_stdio_rtt(hub_master 1)
+# Disable default stdio drivers since we use our custom RTT logger
 pico_enable_stdio_usb(hub_master 0)
 pico_enable_stdio_uart(hub_master 0)
 
 # Link the actual libraries, including the shared interface library
 target_link_libraries(hub_master PRIVATE
     pico_stdlib 
-    pico_stdio_rtt
     FreeRTOS-Kernel-Heap4
     shared
     pico_multicore

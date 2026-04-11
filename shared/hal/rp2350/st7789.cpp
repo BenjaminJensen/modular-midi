@@ -7,8 +7,10 @@ ST7789::ST7789(spi_inst_t* spi_port, uint sck_pin, uint tx_pin, uint cs_pin, uin
 
 void ST7789::init() {
     // 1. Initialize SPI at a fast baudrate (62.5 MHz is typical for ST7789 on RP-series)
-    spi_init(spi, 10 * 1000 * 1000);
+    spi_init(spi, 1 * 1000 * 1000);
     
+    spi_set_format(spi, 8, SPI_CPOL_1, SPI_CPHA_1, SPI_MSB_FIRST);
+
     // 2. Set Pin functions for SPI SCK and MOSI (TX)
     gpio_set_function(pin_sck, GPIO_FUNC_SPI);
     gpio_set_function(pin_tx, GPIO_FUNC_SPI);
@@ -28,13 +30,36 @@ void ST7789::init() {
 
     // 4. Perform a hardware reset
     reset();
+    sleep_ms(150);
 
     // 5. Software Init commands for ST7789
     send_cmd(0x11); // Sleep Out
-    sleep_ms(120);
+    sleep_ms(150);
 
-    // --- Add additional required ST7789 configuration commands here ---
-    // e.g., Color format (0x3A), Memory data access control (0x36), etc.
+    // 6.
+    send_cmd(0x3A); // COLMOD (Color Mode)
+    send_data(0x05); // 16-bit color
+
+    // 7.
+    send_cmd(0x36); // MADCTL (Memory Data Access Control)
+    send_data(0x00); // Set rotation and RGB/BGR order as needed
+
+    // 8.
+    // send_cmd(0x21); // INVON (Display Inversion On)
+
+    // 9.
+    send_cmd(0x13); // NORON (Normal Display Mode On)
+
+    // Clear the screen to black on startup to prevent random noise.
+    // We clear the entire 240x320 ST7789 GRAM. This ensures the 76x284
+    // physical area is fully cleared regardless of any hardware offsets.
+    set_window(0, 0, 240 - 1, 320 - 1);
+    send_cmd(0x2C); // RAMWR (Memory Write)
+
+    uint8_t black_row[240 * 2] = {0}; // 2 bytes per pixel (RGB565)
+    for (int y = 0; y < 320; y++) {
+        send_data(black_row, sizeof(black_row));
+    }
 }
 
 void ST7789::reset() {

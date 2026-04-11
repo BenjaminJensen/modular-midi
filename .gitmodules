@@ -7,3 +7,6 @@
 [submodule "libs/lvgl"]
 	path = libs/lvgl
 	url = https://github.com/lvgl/lvgl.git
+[submodule "libs/RTT"]
+	path = libs/RTT
+	url = https://github.com/SEGGERMicro/RTT
