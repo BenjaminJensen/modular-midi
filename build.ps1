@@ -3,7 +3,7 @@ $NINJA_PATH = "C:\Program Files (x86)\ninja"
 $CMAKE_PATH = "C:\Program Files\CMake\binn"
 
 $env:PATH = "$ARM_PATH;$NINJA_PATH;$CMAKE_PATH;" + $env:PATH
-$env:PICO_SDK_PATH = "F:\git\electronics\modular-midi\libs\pico-sdk"
+#$env:PICO_SDK_PATH = "F:\git\electronics\modular-midi\libs\pico-sdk"
 
 # This flag tells the SDK: "Don't try to sign the binary, I'll handle it."
 $BUILD_DIR = "F:\git\electronics\modular-midi\build"

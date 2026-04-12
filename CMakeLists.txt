@@ -4,6 +4,7 @@
 cmake_minimum_required(VERSION 3.14)
 
 # Pull in SDK (must be before project)
+set(PICO_SDK_PATH "${CMAKE_CURRENT_SOURCE_DIR}/libs/pico-sdk")
 include(libs/pico-sdk/external/pico_sdk_import.cmake)
 project(freertos-sample C CXX ASM)
 set(CMAKE_C_STANDARD 11)

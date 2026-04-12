@@ -15,7 +15,8 @@ void blink_task(void *pvParameters) {
     gpio_set_dir(LED_PIN, GPIO_OUT);
 
     for(;;) {
-        printf("Blinking LED\n");
+        Logger::log("Blink task\n");
+        // printf("Blinking LED\n");
         gpio_put(LED_PIN, 1);
         vTaskDelay(pdMS_TO_TICKS(500));
         gpio_put(LED_PIN, 0);
@@ -37,6 +38,8 @@ void display_task(void) {
     display.display_on();
 
     for(;;) {
+        
+        Logger::log("Display task\n");
         gpio_put(LED_PIN, 1);
         busy_wait_ms(250);
         gpio_put(LED_PIN, 0);
@@ -47,7 +50,7 @@ void display_task(void) {
 int main() {
     // This now wakes up the RTT driver instead of USB/UART
 
-    stdio_init_all();
+    // stdio_init_all();
     
     // Initialize the RTT Logger 
     // (This safely configures RTT channels 1 and 2 for Core 0 and Core 1)

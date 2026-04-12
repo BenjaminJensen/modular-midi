@@ -14,36 +14,32 @@ private:
     static bool initialized;
 
 public:
-    static void init() {
-        if (initialized) return;
-
-        // Claim an unused hardware spinlock for the internal SEGGER RTT locks
-        int lock_num = spin_lock_claim_unused(true);
-        rtt_spin_lock = spin_lock_instance(lock_num);
-
-        // Configure RTT channels
-        SEGGER_RTT_ConfigUpBuffer(1, "Core0", NULL, 0, SEGGER_RTT_MODE_NO_BLOCK_SKIP);
-        SEGGER_RTT_ConfigUpBuffer(2, "Core1", NULL, 0, SEGGER_RTT_MODE_NO_BLOCK_SKIP);
-
-        initialized = true;
-    }
+    static void init();
 
     // Direct formatted logging, fully safe for pointers and dynamic strings
     static void log(const char* format, ...) {
-        if (!initialized) return;
+        if (!initialized || !rtt_spin_lock) return;
+
+        // Gem interrupts og tag locken for at sikre, at den anden kerne venter
+        uint32_t save = spin_lock_blocking(rtt_spin_lock);
 
         va_list args;
         va_start(args, format);
 
         uint core_num = get_core_num();
-        
+
+        // Nu ejer denne kerne RTT bufferen fuldstændigt
         if (core_num == 0) {
-            SEGGER_RTT_vprintf(1, format, &args);
+            SEGGER_RTT_WriteString(0, "0: ");
         } else {
-            SEGGER_RTT_vprintf(2, format, &args);
+            SEGGER_RTT_WriteString(0, "1: ");
         }
 
-        
+        SEGGER_RTT_vprintf(0, format, &args);
+
         va_end(args);
+
+        // Giv locken fri og genaktiver interrupts
+        spin_unlock(rtt_spin_lock, save);
     }
 };
