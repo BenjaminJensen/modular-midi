@@ -23,7 +23,7 @@
             "servertype": "bmp",
             "request": "launch",
             "cwd": "${workspaceRoot}",
-            "executable": "${workspaceRoot}/build/hub_master.elf", // replace with your executable
+            "executable": "${workspaceRoot}/build/projects/hub-master/hub_master.elf", // replace with your executable
             //"preLaunchTask": "Build STM", // using stm32-for-vscode extension, this is the build task
             "postStartSessionCommands": [
                 "monitor rtt enable",

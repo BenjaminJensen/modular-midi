@@ -3,6 +3,11 @@
 #include "FreeRTOS.h"
 #include "task.h"
 #include <cstdio>
+#include "st7789.h"
+#include "AsyncLogger.h"
+
+// Statically instantiate the display using the default pins defined in the header
+static ST7789 display;
 
 void blink_task(void *pvParameters) {
     const uint LED_PIN = 0;
@@ -10,7 +15,8 @@ void blink_task(void *pvParameters) {
     gpio_set_dir(LED_PIN, GPIO_OUT);
 
     for(;;) {
-        printf("Blinking LED\n");
+        Logger::log("Blink task\n");
+        // printf("Blinking LED\n");
         gpio_put(LED_PIN, 1);
         vTaskDelay(pdMS_TO_TICKS(500));
         gpio_put(LED_PIN, 0);
@@ -27,7 +33,13 @@ void display_task(void) {
     gpio_init(LED_PIN);
     gpio_set_dir(LED_PIN, GPIO_OUT);
 
+    // Initialize the statically allocated display
+    display.init();
+    display.display_on();
+
     for(;;) {
+        
+        Logger::log("Display task\n");
         gpio_put(LED_PIN, 1);
         busy_wait_ms(250);
         gpio_put(LED_PIN, 0);
@@ -37,7 +49,17 @@ void display_task(void) {
 
 int main() {
     // This now wakes up the RTT driver instead of USB/UART
-    stdio_init_all();
+
+    // stdio_init_all();
+    
+    // Initialize the RTT Logger 
+    // (This safely configures RTT channels 1 and 2 for Core 0 and Core 1)
+    Logger::init();
+
+    // Now you can log freely!
+    Logger::log("System starting up...\n");
+    Logger::log("Running on Core: %d\n", get_core_num());
+    Logger::log("String test: %s\n", "Hello World!");
     
     // Create the task and pin it strictly to Core 0
     xTaskCreate(blink_task, "Blink", 256, NULL, 1, NULL);
