@@ -15,6 +15,7 @@ public:
     // External API
     void init();
     void display_on();
+    void clear_screen(uint16_t color = 0x0000); // Default to black
     
     // Non-static flush function for the class instance
     //void flush(lv_display_t * disp, const lv_area_t * area, uint8_t * px_map);

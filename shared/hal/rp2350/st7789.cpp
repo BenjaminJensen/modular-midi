@@ -6,6 +6,11 @@
 // This allows the static ISR to call the instance-specific handler.
 static ST7789* dma_irq_instance = nullptr;
 
+const uint16_t phys_width  = 284;
+const uint16_t phys_height = 76;
+
+uint8_t disp_row[phys_width * 2];
+
 // The static ISR that calls the instance-specific handler
 void ST7789::dma_irq_handler_static() {
     if (dma_irq_instance) {
@@ -21,7 +26,6 @@ void ST7789::dma_irq_handler() {
         while (spi_is_busy(spi)) tight_loop_contents(); // Wait for SPI to finish
         gpio_put(pin_cs, 1); // Deselect the display
         dma_transfer_in_progress = false; // Mark transfer as complete
-        LOG_DEBUG("DMA transfer complete\n");
     }
 }
 
@@ -33,7 +37,7 @@ ST7789::ST7789(spi_inst_t* spi_port, uint sck_pin, uint tx_pin, uint cs_pin, uin
 
 void ST7789::init_hw() {
     // Initialize SPI at a fast baudrate (62.5 MHz is typical for ST7789 on RP-series)
-    spi_init(spi, 1 * 1000 * 1000);
+    spi_init(spi, 10 * 1000 * 1000);
     
     spi_set_format(spi, 8, SPI_CPOL_1, SPI_CPHA_1, SPI_MSB_FIRST);
 
@@ -90,33 +94,53 @@ void ST7789::init() {
     set_pixel_format(0x05); //  16-bit/pixel (RGB 5-6-5-bit input), 65K-Colors, 3Ah=”05h”
 
     // Memory Access Control - set rotation and RGB/BGR order as needed
-    set_data_access(0x00);
-    //send_cmd(0x36); // MADCTL (Memory Data Access Control)
-    //send_data(0x00); // Set rotation and RGB/BGR order as needed
-
-    // Optional: Enable display inversion for better contrast (can be toggled based on preference)
-    // send_cmd(0x21); // INVON (Display Inversion On)
-
+    /*
+        Value (Hex) Binary Resulting Layout
+        0x70 0111 0000 Original (Top-Left)
+        0xB 01011 0000 Lower-Right (Mirrored)
+        0xA0 1010 0000 Try this next (Rotated 180°)
+        0x60 0110 0000 Try this last (Flipped X/Y)
+    */
+    set_data_access(0x70);
+    
     // Exit sleep mode and prepare to receive pixel data
     set_mode_on();
     sleep_ms(150);
 
-    //send_cmd(0x13); // NORON (Normal Display Mode On)
-
-    // Clear the screen to black on startup to prevent random noise.
-    // We clear the entire 240x320 ST7789 GRAM. This ensures the 76x284
-    // physical area is fully cleared regardless of any hardware offsets.
-    set_window(0, 0, 240 - 1, 320 - 1);
-    set_memory_write();
-
-    uint8_t black_row[240 * 2] = {0}; // 2 bytes per pixel (RGB565)
-    for (int y = 0; y < 320; y++) {
-        send_data(black_row, sizeof(black_row));
-    }
+    clear_screen();
 }
 
 void ST7789::sleep_out() {
     send_cmd(0x11); // Sleep Out
+}
+
+void ST7789::clear_screen(uint16_t color) {
+    while (dma_transfer_in_progress) { tight_loop_contents(); }
+
+    // --- ADJUST THESE UNTIL THE NOISE DISAPPEARS ---
+    const uint16_t X_OFFSET = 18; 
+    const uint16_t Y_OFFSET = 82;
+    //const uint16_t X_OFFSET = 0; 
+   // const uint16_t Y_OFFSET = 0;  
+
+    // 1. Target the physical glass location in RAM
+    set_window(X_OFFSET, Y_OFFSET, X_OFFSET + phys_width - 1, Y_OFFSET + phys_height - 1);
+    set_memory_write();
+
+    // 2. Pre-calculate the two bytes for RGB565
+    uint8_t hb = (color >> 8);
+    uint8_t lb = (color & 0xFF);
+
+    // 3. Fill the row buffer ONCE
+    for (int i = 0; i < phys_width*2; i += 2) {
+        disp_row[i]     = hb;
+        disp_row[i + 1] = lb;
+    }
+
+    // 4. Blast the data to the display
+    for (int y = 0; y < phys_height; y++) {
+        send_data(disp_row, sizeof(disp_row));
+    }
 }
 
 void ST7789::set_pixel_format(uint8_t format) {
@@ -177,7 +201,6 @@ void ST7789::send_data(const uint8_t* data, size_t len) {
     // Configure and start the DMA transfer
     dma_channel_set_read_addr(dma_channel, data, false);
     dma_channel_set_trans_count(dma_channel, len, true); // The 'true' triggers the transfer
-    LOG_DEBUG("DMA transfer started\n");
 }
 
 void ST7789::send_data(uint8_t data) {
