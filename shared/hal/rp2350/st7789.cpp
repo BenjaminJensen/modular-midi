@@ -5,7 +5,7 @@ ST7789::ST7789(spi_inst_t* spi_port, uint sck_pin, uint tx_pin, uint cs_pin, uin
     : spi(spi_port), pin_sck(sck_pin), pin_tx(tx_pin), pin_cs(cs_pin), pin_dc(dc_pin), pin_rst(rst_pin) {
 }
 
-void ST7789::init() {
+void ST7789::init_hw() {
     // 1. Initialize SPI at a fast baudrate (62.5 MHz is typical for ST7789 on RP-series)
     spi_init(spi, 1 * 1000 * 1000);
     
@@ -27,39 +27,76 @@ void ST7789::init() {
     gpio_init(pin_rst);
     gpio_set_dir(pin_rst, GPIO_OUT);
     gpio_put(pin_rst, 1);
+}
+void ST7789::init() {
+    init_hw();
 
-    // 4. Perform a hardware reset
+    // Perform a hardware reset
     reset();
     sleep_ms(150);
 
-    // 5. Software Init commands for ST7789
-    send_cmd(0x11); // Sleep Out
+    // Software Init commands for ST7789
+    sleep_out(); // Sleep Out
     sleep_ms(150);
 
-    // 6.
-    send_cmd(0x3A); // COLMOD (Color Mode)
-    send_data(0x05); // 16-bit color
+    // Set pixel format to 16 bits per pixel (RGB565)
+    set_pixel_format(0x05); //  16-bit/pixel (RGB 5-6-5-bit input), 65K-Colors, 3Ah=”05h”
 
-    // 7.
-    send_cmd(0x36); // MADCTL (Memory Data Access Control)
-    send_data(0x00); // Set rotation and RGB/BGR order as needed
+    // Memory Access Control - set rotation and RGB/BGR order as needed
+    set_data_access(0x00);
+    //send_cmd(0x36); // MADCTL (Memory Data Access Control)
+    //send_data(0x00); // Set rotation and RGB/BGR order as needed
 
-    // 8.
+    // Optional: Enable display inversion for better contrast (can be toggled based on preference)
     // send_cmd(0x21); // INVON (Display Inversion On)
 
-    // 9.
-    send_cmd(0x13); // NORON (Normal Display Mode On)
+    // Exit sleep mode and prepare to receive pixel data
+    set_mode_on();
+    sleep_ms(150);
+
+    //send_cmd(0x13); // NORON (Normal Display Mode On)
 
     // Clear the screen to black on startup to prevent random noise.
     // We clear the entire 240x320 ST7789 GRAM. This ensures the 76x284
     // physical area is fully cleared regardless of any hardware offsets.
     set_window(0, 0, 240 - 1, 320 - 1);
-    send_cmd(0x2C); // RAMWR (Memory Write)
+    set_memory_write();
 
     uint8_t black_row[240 * 2] = {0}; // 2 bytes per pixel (RGB565)
     for (int y = 0; y < 320; y++) {
         send_data(black_row, sizeof(black_row));
     }
+}
+
+void ST7789::sleep_out() {
+    send_cmd(0x11); // Sleep Out
+}
+
+void ST7789::set_pixel_format(uint8_t format) {
+    send_cmd(0x3A); // COLMOD (Color Mode)
+    send_data(format);
+}
+
+void ST7789::set_data_access(uint8_t format) {
+    send_cmd(0x36); // MADCTL (Memory Data Access Control)
+    send_data(format);
+}
+
+void ST7789::set_mode_on() {
+    // NORON (Normal Display Mode On)
+    send_cmd(0x13); // Sleep Out
+}
+
+void ST7789::set_memory_write() {
+    /*
+    Page 202 of the ST7789 datasheet:
+        -This command is used to transfer data from MCU to frame memory.
+        -When this command is accepted, the column register and the page register are reset to the start column/start
+        page positions.
+        -The start column/start page positions are different in accordance with MADCTL setting.
+        -Sending any other command can stop frame write. 
+    */
+    send_cmd(0x2C); // RAMWR (Memory Write)
 }
 
 void ST7789::reset() {
