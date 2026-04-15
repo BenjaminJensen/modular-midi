@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include "hardware/spi.h"
+#include "hardware/dma.h"
 #include "hardware/gpio.h"
 #include "pico/stdlib.h"
 
@@ -28,6 +29,7 @@ private:
     uint pin_cs;
     uint pin_dc;
     uint pin_rst;
+    int dma_channel;
 
     // Internal helpers
     void init_hw();

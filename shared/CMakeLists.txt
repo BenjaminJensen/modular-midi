@@ -13,4 +13,4 @@ target_include_directories(shared PUBLIC
 )
 
 # Link the underlying Pico SDK hardware libraries needed by our shared files
-target_link_libraries(shared PUBLIC pico_stdlib hardware_spi hardware_gpio)
+target_link_libraries(shared PUBLIC pico_stdlib hardware_spi hardware_gpio hardware_dma)

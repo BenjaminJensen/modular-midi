@@ -2,11 +2,12 @@
 #include "pico/stdlib.h"
 
 ST7789::ST7789(spi_inst_t* spi_port, uint sck_pin, uint tx_pin, uint cs_pin, uint dc_pin, uint rst_pin)
-    : spi(spi_port), pin_sck(sck_pin), pin_tx(tx_pin), pin_cs(cs_pin), pin_dc(dc_pin), pin_rst(rst_pin) {
+    : spi(spi_port), pin_sck(sck_pin), pin_tx(tx_pin), pin_cs(cs_pin), pin_dc(dc_pin), pin_rst(rst_pin),
+      dma_channel(dma_claim_unused_channel(true)) {
 }
 
 void ST7789::init_hw() {
-    // 1. Initialize SPI at a fast baudrate (62.5 MHz is typical for ST7789 on RP-series)
+    // Initialize SPI at a fast baudrate (62.5 MHz is typical for ST7789 on RP-series)
     spi_init(spi, 1 * 1000 * 1000);
     
     spi_set_format(spi, 8, SPI_CPOL_1, SPI_CPHA_1, SPI_MSB_FIRST);
@@ -27,6 +28,20 @@ void ST7789::init_hw() {
     gpio_init(pin_rst);
     gpio_set_dir(pin_rst, GPIO_OUT);
     gpio_put(pin_rst, 1);
+
+    // Configure DMA for SPI transfers
+    // TODO: Assert that dma_channel is valid (not -1) before using it
+    dma_channel_config c = dma_channel_get_default_config(dma_channel);
+    channel_config_set_transfer_data_size(&c, DMA_SIZE_8);
+    channel_config_set_dreq(&c, spi_get_dreq(spi, true)); // DREQ for SPI TX
+    dma_channel_configure(
+        dma_channel,
+        &c,
+        &spi_get_hw(spi)->dr, // Write to SPI data register
+        NULL,                 // Read address is set later
+        0,                    // Transfer count is set later
+        false                 // Don't start immediately
+    );
 }
 void ST7789::init() {
     init_hw();
@@ -116,7 +131,19 @@ void ST7789::send_cmd(uint8_t cmd) {
 void ST7789::send_data(const uint8_t* data, size_t len) {
     gpio_put(pin_cs, 0);
     gpio_put(pin_dc, 1); // DC high for data
-    spi_write_blocking(spi, data, len);
+
+    // Wait for any previous DMA transfer to finish before starting a new one
+    dma_channel_wait_for_finish_blocking(dma_channel);
+
+    // Configure and start the DMA transfer
+    dma_channel_set_read_addr(dma_channel, data, false);
+    dma_channel_set_trans_count(dma_channel, len, true); // The 'true' triggers the transfer
+
+    // Wait for the DMA transfer to complete
+    dma_channel_wait_for_finish_blocking(dma_channel);
+    // Wait until SPI is not busy to ensure all data has been sent
+    while (spi_is_busy(spi)) tight_loop_contents();
+
     gpio_put(pin_cs, 1);
 }
 
