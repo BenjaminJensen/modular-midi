@@ -1,9 +1,34 @@
 #include "st7789.h"
 #include "pico/stdlib.h"
+#include "AsyncLogger.h"
+
+// A static pointer to the ST7789 instance for the ISR.
+// This allows the static ISR to call the instance-specific handler.
+static ST7789* dma_irq_instance = nullptr;
+
+// The static ISR that calls the instance-specific handler
+void ST7789::dma_irq_handler_static() {
+    if (dma_irq_instance) {
+        dma_irq_instance->dma_irq_handler();
+    }
+}
+
+// Instance-specific ISR
+void ST7789::dma_irq_handler() {
+    // Check if the interrupt is for our DMA channel
+    if (dma_channel_get_irq0_status(dma_channel)) {
+        dma_channel_acknowledge_irq0(dma_channel); // Clear the interrupt
+        while (spi_is_busy(spi)) tight_loop_contents(); // Wait for SPI to finish
+        gpio_put(pin_cs, 1); // Deselect the display
+        dma_transfer_in_progress = false; // Mark transfer as complete
+        LOG_DEBUG("DMA transfer complete\n");
+    }
+}
 
 ST7789::ST7789(spi_inst_t* spi_port, uint sck_pin, uint tx_pin, uint cs_pin, uint dc_pin, uint rst_pin)
     : spi(spi_port), pin_sck(sck_pin), pin_tx(tx_pin), pin_cs(cs_pin), pin_dc(dc_pin), pin_rst(rst_pin),
-      dma_channel(dma_claim_unused_channel(true)) {
+      dma_channel(dma_claim_unused_channel(true)), dma_transfer_in_progress(false) {
+    dma_irq_instance = this;
 }
 
 void ST7789::init_hw() {
@@ -42,6 +67,13 @@ void ST7789::init_hw() {
         0,                    // Transfer count is set later
         false                 // Don't start immediately
     );
+
+    // Enable the DMA interrupt on the specified channel
+    dma_channel_set_irq0_enabled(dma_channel, true);
+
+    // Configure the ISR and enable it
+    irq_set_exclusive_handler(DMA_IRQ_0, ST7789::dma_irq_handler_static);
+    irq_set_enabled(DMA_IRQ_0, true);
 }
 void ST7789::init() {
     init_hw();
@@ -122,6 +154,10 @@ void ST7789::reset() {
 }
 
 void ST7789::send_cmd(uint8_t cmd) {
+    // Wait for any DMA transfer to finish before using SPI directly
+    while (dma_transfer_in_progress) {
+        tight_loop_contents();
+    }
     gpio_put(pin_cs, 0);
     gpio_put(pin_dc, 0); // DC low for command
     spi_write_blocking(spi, &cmd, 1);
@@ -129,22 +165,19 @@ void ST7789::send_cmd(uint8_t cmd) {
 }
 
 void ST7789::send_data(const uint8_t* data, size_t len) {
+    // Wait for any previous DMA transfer to finish.
+    while (dma_transfer_in_progress) {
+        tight_loop_contents();
+    }
+
     gpio_put(pin_cs, 0);
     gpio_put(pin_dc, 1); // DC high for data
 
-    // Wait for any previous DMA transfer to finish before starting a new one
-    dma_channel_wait_for_finish_blocking(dma_channel);
-
+    dma_transfer_in_progress = true;
     // Configure and start the DMA transfer
     dma_channel_set_read_addr(dma_channel, data, false);
     dma_channel_set_trans_count(dma_channel, len, true); // The 'true' triggers the transfer
-
-    // Wait for the DMA transfer to complete
-    dma_channel_wait_for_finish_blocking(dma_channel);
-    // Wait until SPI is not busy to ensure all data has been sent
-    while (spi_is_busy(spi)) tight_loop_contents();
-
-    gpio_put(pin_cs, 1);
+    LOG_DEBUG("DMA transfer started\n");
 }
 
 void ST7789::send_data(uint8_t data) {

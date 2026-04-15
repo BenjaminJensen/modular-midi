@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include "hardware/spi.h"
+#include "hardware/irq.h"
 #include "hardware/dma.h"
 #include "hardware/gpio.h"
 #include "pico/stdlib.h"
@@ -30,6 +31,7 @@ private:
     uint pin_dc;
     uint pin_rst;
     int dma_channel;
+    volatile bool dma_transfer_in_progress;
 
     // Internal helpers
     void init_hw();
@@ -45,4 +47,9 @@ private:
     
     // Sets the column and row address window for ST7789
     void set_window(int32_t x1, int32_t y1, int32_t x2, int32_t y2);
+
+private:
+    // DMA interrupt handler
+    void dma_irq_handler();
+    static void dma_irq_handler_static();
 };

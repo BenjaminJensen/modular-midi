@@ -4,6 +4,12 @@
 #include "hardware/sync.h"
 #include "SEGGER_RTT.h"
 #include <cstdarg>
+#define ENABLE_LOGGING
+#ifdef ENABLE_LOGGING
+    #define LOG_DEBUG(fmt, ...) Logger::log(fmt, ##__VA_ARGS__)
+#else
+    #define LOG_DEBUG(fmt, ...) ((void)0)
+#endif
 
 extern "C" {
     extern spin_lock_t* rtt_spin_lock;
