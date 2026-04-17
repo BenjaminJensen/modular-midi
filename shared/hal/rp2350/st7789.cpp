@@ -9,7 +9,9 @@ static ST7789* dma_irq_instance = nullptr;
 const uint16_t phys_width  = 284;
 const uint16_t phys_height = 76;
 
-uint8_t disp_row[phys_width * 2];
+uint16_t disp_row[phys_width];
+
+const uint DEBUG_PIN = 13;
 
 // The static ISR that calls the instance-specific handler
 void ST7789::dma_irq_handler_static() {
@@ -26,6 +28,7 @@ void ST7789::dma_irq_handler() {
         while (spi_is_busy(spi)) tight_loop_contents(); // Wait for SPI to finish
         gpio_put(pin_cs, 1); // Deselect the display
         dma_transfer_in_progress = false; // Mark transfer as complete
+        gpio_put(DEBUG_PIN, 0);
     }
 }
 
@@ -39,7 +42,7 @@ void ST7789::init_hw() {
     // Initialize SPI at a fast baudrate (62.5 MHz is typical for ST7789 on RP-series)
     spi_init(spi, 10 * 1000 * 1000);
     
-    spi_set_format(spi, 8, SPI_CPOL_1, SPI_CPHA_1, SPI_MSB_FIRST);
+    spi_set_format(spi, 16, SPI_CPOL_1, SPI_CPHA_1, SPI_MSB_FIRST);
 
     // 2. Set Pin functions for SPI SCK and MOSI (TX)
     gpio_set_function(pin_sck, GPIO_FUNC_SPI);
@@ -58,10 +61,16 @@ void ST7789::init_hw() {
     gpio_set_dir(pin_rst, GPIO_OUT);
     gpio_put(pin_rst, 1);
 
+    // Debug pin to monitor DMA activity (optional)
+    gpio_init(DEBUG_PIN);
+    gpio_set_dir(DEBUG_PIN, GPIO_OUT);
+    gpio_put(DEBUG_PIN, 0);
+
     // Configure DMA for SPI transfers
     // TODO: Assert that dma_channel is valid (not -1) before using it
     dma_channel_config c = dma_channel_get_default_config(dma_channel);
-    channel_config_set_transfer_data_size(&c, DMA_SIZE_8);
+    channel_config_set_transfer_data_size(&c, DMA_SIZE_16);
+    channel_config_set_bswap(&c, false);
     channel_config_set_dreq(&c, spi_get_dreq(spi, true)); // DREQ for SPI TX
     dma_channel_configure(
         dma_channel,
@@ -107,7 +116,7 @@ void ST7789::init() {
     set_mode_on();
     sleep_ms(150);
 
-    clear_screen();
+    clear_screen();//(0x07E0); // Clear to green for testing
 }
 
 void ST7789::sleep_out() {
@@ -119,27 +128,33 @@ void ST7789::clear_screen(uint16_t color) {
 
     // --- ADJUST THESE UNTIL THE NOISE DISAPPEARS ---
     const uint16_t X_OFFSET = 18; 
-    const uint16_t Y_OFFSET = 82;
-    //const uint16_t X_OFFSET = 0; 
-   // const uint16_t Y_OFFSET = 0;  
+    const uint16_t Y_OFFSET = 82; 
 
-    // 1. Target the physical glass location in RAM
+    // First block takes 5.6us
+    gpio_put(DEBUG_PIN, 1);
+
+    // Target the physical glass location in RAM
     set_window(X_OFFSET, Y_OFFSET, X_OFFSET + phys_width - 1, Y_OFFSET + phys_height - 1);
     set_memory_write();
 
-    // 2. Pre-calculate the two bytes for RGB565
-    uint8_t hb = (color >> 8);
-    uint8_t lb = (color & 0xFF);
+    gpio_put(DEBUG_PIN, 0);
+    
+    // Optimization: Write 4 bytes (2 pixels) per loop iteration
+    // 12 us optimized
+    uint32_t* row_ptr32 = (uint32_t*)disp_row;
+    uint32_t two_pixels = (color << 16) | color; // Pack two 16-bit pixels
 
-    // 3. Fill the row buffer ONCE
-    for (int i = 0; i < phys_width*2; i += 2) {
-        disp_row[i]     = hb;
-        disp_row[i + 1] = lb;
+    // Unrolled 32-bit fill (8 bytes per loop)
+    for (int i = 0; i < (phys_width / 2); i += 2) {
+        row_ptr32[i]     = two_pixels;
+        row_ptr32[i + 1] = two_pixels;
     }
 
-    // 4. Blast the data to the display
+    gpio_put(DEBUG_PIN, 1);
+    
+    // Blast the data to the display
     for (int y = 0; y < phys_height; y++) {
-        send_data(disp_row, sizeof(disp_row));
+        send_data((const uint8_t*)disp_row, sizeof(disp_row));
     }
 }
 
@@ -182,10 +197,17 @@ void ST7789::send_cmd(uint8_t cmd) {
     while (dma_transfer_in_progress) {
         tight_loop_contents();
     }
+    
+    // Temporarily switch to 8-bit SPI for command
+    spi_set_format(spi, 8, SPI_CPOL_1, SPI_CPHA_1, SPI_MSB_FIRST);
+    
     gpio_put(pin_cs, 0);
     gpio_put(pin_dc, 0); // DC low for command
     spi_write_blocking(spi, &cmd, 1);
     gpio_put(pin_cs, 1);
+    
+    // Restore 16-bit SPI for DMA data
+    spi_set_format(spi, 16, SPI_CPOL_1, SPI_CPHA_1, SPI_MSB_FIRST);
 }
 
 void ST7789::send_data(const uint8_t* data, size_t len) {
@@ -200,21 +222,39 @@ void ST7789::send_data(const uint8_t* data, size_t len) {
     dma_transfer_in_progress = true;
     // Configure and start the DMA transfer
     dma_channel_set_read_addr(dma_channel, data, false);
-    dma_channel_set_trans_count(dma_channel, len, true); // The 'true' triggers the transfer
+    // Since DMA is 16-bit, transfer count is halved
+    dma_channel_set_trans_count(dma_channel, len / 2, true); // The 'true' triggers the transfer
 }
 
 void ST7789::send_data(uint8_t data) {
-    send_data(&data, 1);
+    // Wait for any previous DMA transfer to finish.
+    while (dma_transfer_in_progress) {
+        tight_loop_contents();
+    }
+    // Temporarily switch to 8-bit SPI for single-byte data
+    spi_set_format(spi, 8, SPI_CPOL_1, SPI_CPHA_1, SPI_MSB_FIRST);
+    gpio_put(pin_cs, 0);
+    gpio_put(pin_dc, 1); // DC high for data
+    spi_write_blocking(spi, &data, 1);
+    gpio_put(pin_cs, 1);
+    // Restore 16-bit SPI for DMA data
+    spi_set_format(spi, 16, SPI_CPOL_1, SPI_CPHA_1, SPI_MSB_FIRST);
 }
 
 void ST7789::set_window(int32_t x1, int32_t y1, int32_t x2, int32_t y2) {
     send_cmd(0x2A); // CASET (Column Address Set)
-    uint8_t x_data[] = { (uint8_t)(x1 >> 8), (uint8_t)(x1 & 0xFF), (uint8_t)(x2 >> 8), (uint8_t)(x2 & 0xFF) };
-    send_data(x_data, sizeof(x_data));
+
+    // These two buffers are static as they are transfered with dma, this i s not good design and needs to be reworked
+    static uint16_t x_data[2];
+    x_data[0] = (uint16_t)x1;
+    x_data[1] = (uint16_t)x2;
+    send_data((const uint8_t*)x_data, sizeof(x_data));
 
     send_cmd(0x2B); // RASET (Row Address Set)
-    uint8_t y_data[] = { (uint8_t)(y1 >> 8), (uint8_t)(y1 & 0xFF), (uint8_t)(y2 >> 8), (uint8_t)(y2 & 0xFF) };
-    send_data(y_data, sizeof(y_data));
+    static uint16_t y_data[2];
+    y_data[0] = (uint16_t)y1;
+    y_data[1] = (uint16_t)y2;
+    send_data((const uint8_t*)y_data, sizeof(y_data));
 }
 
 void ST7789::display_on() {

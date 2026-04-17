@@ -102,9 +102,9 @@ void display_task(void) {
         
         Logger::log("Display task\n");
         gpio_put(LED_PIN, 1);
-        busy_wait_ms(150);
+        busy_wait_ms(25);
         gpio_put(LED_PIN, 0);
-        busy_wait_ms(150);
+        busy_wait_ms(25);
         color = get_rainbow_color(pos);
         display.clear_screen(color); // Clear to red for testing
         pos++;
