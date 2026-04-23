@@ -5,9 +5,11 @@
 #include <cstdio>
 #include "st7789.h"
 #include "AsyncLogger.h"
+#include "display.h"
 
 // Statically instantiate the display using the default pins defined in the header
-static ST7789 display;
+static ST7789 st7789;
+static Display display;
 
 uint16_t add_ten_to_channels(uint16_t color) {
     // 1. Unpack the channels
@@ -93,9 +95,11 @@ void display_task(void) {
     gpio_init(LED_PIN);
     gpio_set_dir(LED_PIN, GPIO_OUT);
 
-    // Initialize the statically allocated display
     display.init();
-    display.display_on();
+    
+    // Initialize the statically allocated display
+    st7789.init();
+    st7789.display_on();
     uint16_t color = 0x0000; // Blue in RGB565
     uint8_t pos = 0;
     for(;;) {
@@ -106,7 +110,7 @@ void display_task(void) {
         gpio_put(LED_PIN, 0);
         busy_wait_ms(25);
         color = get_rainbow_color(pos);
-        display.clear_screen(color); // Clear to red for testing
+        st7789.clear_screen(color); // Clear to red for testing
         pos++;
         
     }

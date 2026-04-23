@@ -2,6 +2,7 @@
 add_library(shared STATIC
     hal/rp2350/st7789.cpp
     hal/rp2350/AsyncLogger.cpp
+    hal/rp2350/display.cpp
     ${CMAKE_CURRENT_LIST_DIR}/../libs/RTT/RTT/SEGGER_RTT.c
     ${CMAKE_CURRENT_LIST_DIR}/../libs/RTT/RTT/SEGGER_RTT_printf.c
 )
@@ -13,4 +14,10 @@ target_include_directories(shared PUBLIC
 )
 
 # Link the underlying Pico SDK hardware libraries needed by our shared files
-target_link_libraries(shared PUBLIC pico_stdlib hardware_spi hardware_gpio hardware_dma)
+target_link_libraries(shared PUBLIC 
+    pico_stdlib 
+    hardware_spi 
+    hardware_gpio 
+    hardware_dma 
+    lvgl
+)

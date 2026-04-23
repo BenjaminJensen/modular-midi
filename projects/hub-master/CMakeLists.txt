@@ -20,7 +20,14 @@ target_link_libraries(hub_master PRIVATE
     FreeRTOS-Kernel-Heap4
     shared
     pico_multicore
+    lvgl
 )
 
 # Create ELF, UF2, etc.
 pico_add_extra_outputs(hub_master)
+
+# After building, display the memory footprint
+add_custom_command(TARGET hub_master POST_BUILD
+    COMMAND arm-none-eabi-size $<TARGET_FILE:hub_master>
+    COMMENT "Memory usage summary:"
+)

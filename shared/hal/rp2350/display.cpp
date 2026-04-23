@@ -1,23 +1,25 @@
 #include "display.h"
 #include "st7789.h"
-// Define your pins
-#define SPI_PORT spi0
-#define PIN_SCK  18
-#define PIN_MOSI 19
-#define PIN_MISO 16 // Not used for most displays, but good to define
-#define PIN_CS   17
-#define PIN_DC   21
-#define PIN_RST  20
+
 
 // Screen defines
-#define SCREEN_WIDTH  240
-#define SCREEN_HEIGHT 240
+#define SCREEN_WIDTH  76
+#define SCREEN_HEIGHT 284
 #define DRAW_BUF_SIZE (SCREEN_WIDTH * SCREEN_HEIGHT / 10 * 2) // 10% of screen, 16-bit
+
 
 // Static draw buffer in RP2350 RAM
 static uint8_t buf1_raw[DRAW_BUF_SIZE];
 
-lv_display_t * lvgl_setup() {
+ Display::Display() {
+    display = nullptr;
+}
+
+void Display::init() {
+    display = display_setup();
+}
+
+lv_display_t * Display::display_setup() {
     lv_init();
 
     // Create the display object
@@ -34,4 +36,5 @@ lv_display_t * lvgl_setup() {
     //lv_display_set_flush_cb(disp, my_display_flush);
     return disp;
 }
+
 

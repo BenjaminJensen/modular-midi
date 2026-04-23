@@ -1,4 +1,12 @@
 #include "lvgl.h"
 #include "pico/stdlib.h"
 
-lv_display_t * lvgl_setup();
+class Display {
+public:
+    Display();
+    void init();
+     
+private:
+    lv_display_t * display_setup();
+    lv_display_t * display;
+};
