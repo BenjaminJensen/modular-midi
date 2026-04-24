@@ -12,6 +12,8 @@
     The init() function performs the hardware reset and sends the necessary initialization commands to 
     the display.
 */
+typedef void (*dma_callback_t)(void* user_data);
+
 class ST7789 {
 public:
     // Constructor allows pin override. Defaults assume typical SPI1 pins on a Pico/RP2350
@@ -27,8 +29,10 @@ public:
     // External API
     void init();
     void display_on();
+    void set_dma_complete_cb(dma_callback_t cb, void* data);
+
     void clear_screen(uint16_t color = 0x0000); // Default to black
-    
+    void update(const uint8_t* data, size_t len, int32_t x1, int32_t y1, int32_t x2, int32_t y2);
     // Non-static flush function for the class instance
     //void flush(lv_display_t * disp, const lv_area_t * area, uint8_t * px_map);
 
@@ -47,6 +51,8 @@ private:
     volatile bool dma_transfer_in_progress;
     const uint16_t Y_OFFSET;
     const uint16_t X_OFFSET;
+    dma_callback_t dma_complete_cb = nullptr;
+    void* dma_cb_user_data = nullptr;
 
     // Internal helpers
     void init_hw();
@@ -54,14 +60,14 @@ private:
     void sleep_out();
     void set_pixel_format(uint8_t format);
     void set_mode_on();
-    void set_memory_write();
     void set_data_access(uint8_t format);
-    void send_cmd(uint8_t cmd);
     void send_data(const uint8_t* data, size_t len);
     void send_data(uint8_t data);
+    void send_cmd(uint8_t cmd);
+    void set_window(int32_t x1, int32_t y1, int32_t x2, int32_t y2);
+    void set_memory_write();
     
     // Sets the column and row address window for ST7789
-    void set_window(int32_t x1, int32_t y1, int32_t x2, int32_t y2);
 
 private:
     // DMA interrupt handler

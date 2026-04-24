@@ -35,6 +35,9 @@ lv_display_t * Display::lvgl_setup() {
     // Create the display object
     lv_display_t * disp = lv_display_create(SCREEN_WIDTH, SCREEN_HEIGHT);
 
+    // Attach 'this' (the current Display instance) to the LVGL display object
+    lv_display_set_user_data(disp, this);
+
     // Create the Draw Buffer Descriptor (This wraps your raw array)
     static lv_draw_buf_t draw_buf;
     lv_draw_buf_init(&draw_buf, SCREEN_WIDTH, SCREEN_HEIGHT / 10, LV_COLOR_FORMAT_RGB565, 0, buf1_raw, sizeof(buf1_raw));
@@ -43,6 +46,18 @@ lv_display_t * Display::lvgl_setup() {
     // Note: v9 uses only 3 arguments for this specific function now
     lv_display_set_draw_buffers(disp, &draw_buf, NULL); 
     
-    //lv_display_set_flush_cb(disp, my_display_flush);
+    lv_display_set_flush_cb(disp, Display::lv_flush_wrapper);
     return disp;
+}
+void Display::lv_flush(lv_display_t * disp, const lv_area_t * area, uint8_t * px_map) {
+    // Calculate the number of pixels in the area
+    size_t pixel_count = (area->x2 - area->x1 + 1) * (area->y2 - area->y1 + 1);
+    // Update the display with the pixel data for the specified area
+    st7789.update(px_map, pixel_count * 2, area->x1, area->y1, area->x2, area->y2);
+}
+void Display::lv_flush_wrapper(lv_display_t * disp, const lv_area_t * area, uint8_t * px_map) {
+    // Get instance pointer from user data
+    Display* instance = (Display*)lv_display_get_user_data(disp);
+    instance->lv_flush(disp, area, px_map);
+
 }

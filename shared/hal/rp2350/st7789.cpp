@@ -123,6 +123,16 @@ void ST7789::init() {
 void ST7789::sleep_out() {
     send_cmd(0x11); // Sleep Out
 }
+void ST7789::update(const uint8_t* data, size_t len, int32_t x1, int32_t y1, int32_t x2, int32_t y2) {
+    // TODO: fix this
+    while (dma_transfer_in_progress) { tight_loop_contents(); }
+
+    // Target the physical glass location in RAM
+    set_window(X_OFFSET + x1, Y_OFFSET + y1, X_OFFSET + x2, Y_OFFSET + y2);
+    set_memory_write();
+
+    send_data(data, len);
+}
 
 void ST7789::clear_screen(uint16_t color) {
     while (dma_transfer_in_progress) { tight_loop_contents(); }
