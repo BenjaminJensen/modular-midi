@@ -7,10 +7,22 @@
 #include "hardware/gpio.h"
 #include "pico/stdlib.h"
 
+/*
+    In the constructor we initialize IO pins and the display offsets in the displaycontroller memory map. 
+    The init() function performs the hardware reset and sends the necessary initialization commands to 
+    the display.
+*/
 class ST7789 {
 public:
     // Constructor allows pin override. Defaults assume typical SPI1 pins on a Pico/RP2350
-    ST7789(spi_inst_t* spi_port = spi1, uint sck_pin = 10, uint tx_pin = 11, uint cs_pin = 9, uint dc_pin = 8, uint rst_pin = 12);
+    ST7789(spi_inst_t* spi_port = spi1, 
+        uint sck_pin = 10, 
+        uint tx_pin = 11, 
+        uint cs_pin = 9, 
+        uint dc_pin = 8, 
+        uint rst_pin = 12,
+        uint16_t y_offset = 80, 
+        uint16_t x_offset = 18);
     
     // External API
     void init();
@@ -33,6 +45,8 @@ private:
     uint pin_rst;
     int dma_channel;
     volatile bool dma_transfer_in_progress;
+    const uint16_t Y_OFFSET;
+    const uint16_t X_OFFSET;
 
     // Internal helpers
     void init_hw();

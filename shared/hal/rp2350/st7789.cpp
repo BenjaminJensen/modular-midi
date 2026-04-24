@@ -32,8 +32,9 @@ void ST7789::dma_irq_handler() {
     }
 }
 
-ST7789::ST7789(spi_inst_t* spi_port, uint sck_pin, uint tx_pin, uint cs_pin, uint dc_pin, uint rst_pin)
+ST7789::ST7789(spi_inst_t* spi_port, uint sck_pin, uint tx_pin, uint cs_pin, uint dc_pin, uint rst_pin, uint16_t y_offset, uint16_t x_offset)
     : spi(spi_port), pin_sck(sck_pin), pin_tx(tx_pin), pin_cs(cs_pin), pin_dc(dc_pin), pin_rst(rst_pin),
+      Y_OFFSET(y_offset), X_OFFSET(x_offset),
       dma_channel(dma_claim_unused_channel(true)), dma_transfer_in_progress(false) {
     dma_irq_instance = this;
 }
@@ -125,10 +126,6 @@ void ST7789::sleep_out() {
 
 void ST7789::clear_screen(uint16_t color) {
     while (dma_transfer_in_progress) { tight_loop_contents(); }
-
-    // --- ADJUST THESE UNTIL THE NOISE DISAPPEARS ---
-    const uint16_t X_OFFSET = 18; 
-    const uint16_t Y_OFFSET = 82; 
 
     // First block takes 5.6us
     gpio_put(DEBUG_PIN, 1);
