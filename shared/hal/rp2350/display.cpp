@@ -1,6 +1,4 @@
 #include "display.h"
-#include "st7789.h"
-
 
 // Screen defines
 #define SCREEN_WIDTH  76
@@ -11,15 +9,27 @@
 // Static draw buffer in RP2350 RAM
 static uint8_t buf1_raw[DRAW_BUF_SIZE];
 
+static struct repeating_timer lvgl_tick_timer;
+
+static bool lv_tick_timer_callback(struct repeating_timer *t) {
+    lv_tick_inc(5);
+    return true;
+}
+
  Display::Display() {
     display = nullptr;
 }
 
 void Display::init() {
-    display = display_setup();
+    // Initialize the hardware driver for the display
+    st7789.init();
+    st7789.display_on();
+
+    display = lvgl_setup();
+    add_repeating_timer_ms(5, lv_tick_timer_callback, NULL, &lvgl_tick_timer);
 }
 
-lv_display_t * Display::display_setup() {
+lv_display_t * Display::lvgl_setup() {
     lv_init();
 
     // Create the display object
@@ -36,5 +46,3 @@ lv_display_t * Display::display_setup() {
     //lv_display_set_flush_cb(disp, my_display_flush);
     return disp;
 }
-
-
