@@ -21,7 +21,7 @@ public:
         uint cs_pin = 9, 
         uint dc_pin = 8, 
         uint rst_pin = 12,
-        uint16_t y_offset = 80, 
+        uint16_t y_offset = 82, 
         uint16_t x_offset = 18);
     
     // External API
