@@ -1,9 +1,9 @@
 #include "display.h"
 
 // Screen defines
-#define SCREEN_WIDTH  76
-#define SCREEN_HEIGHT 284
-#define DRAW_BUF_SIZE (SCREEN_WIDTH * SCREEN_HEIGHT / 10 * 2) // 10% of screen, 16-bit
+#define SCREEN_WIDTH  284
+#define SCREEN_HEIGHT 76
+#define DRAW_BUF_SIZE (SCREEN_WIDTH * SCREEN_HEIGHT ) // 50% of screen, 16-bit
 
 
 // Static draw buffer in RP2350 RAM
@@ -22,11 +22,30 @@ static bool lv_tick_timer_callback(struct repeating_timer *t) {
 
 void Display::init() {
     // Initialize the hardware driver for the display
+    st7789.set_callback(this);
     st7789.init();
     st7789.display_on();
 
     display = lvgl_setup();
     add_repeating_timer_ms(5, lv_tick_timer_callback, NULL, &lvgl_tick_timer);
+}
+
+void Display::task() {
+    //while (true) 
+    {
+        if (!tmp) {
+        /*Change the active screen's background color*/
+            lv_obj_set_style_bg_color(lv_screen_active(), lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+
+            /*Create a white label, set its text and align it to the center*/
+            lv_obj_t * label = lv_label_create(lv_screen_active());
+            lv_label_set_text(label, "Hello world");
+            lv_obj_set_style_text_color(lv_screen_active(), lv_color_hex(0x00ff00), LV_PART_MAIN);
+            lv_obj_align(label, LV_ALIGN_CENTER, 0, 0);
+            tmp = true;
+        }
+        lv_timer_handler();
+    }
 }
 
 lv_display_t * Display::lvgl_setup() {
@@ -49,6 +68,7 @@ lv_display_t * Display::lvgl_setup() {
     lv_display_set_flush_cb(disp, Display::lv_flush_wrapper);
     return disp;
 }
+
 void Display::lv_flush(lv_display_t * disp, const lv_area_t * area, uint8_t * px_map) {
     // Calculate the number of pixels in the area
     size_t pixel_count = (area->x2 - area->x1 + 1) * (area->y2 - area->y1 + 1);

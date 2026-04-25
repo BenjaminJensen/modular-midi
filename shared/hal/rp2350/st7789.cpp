@@ -25,10 +25,18 @@ void ST7789::dma_irq_handler() {
     // Check if the interrupt is for our DMA channel
     if (dma_channel_get_irq0_status(dma_channel)) {
         dma_channel_acknowledge_irq0(dma_channel); // Clear the interrupt
-        while (spi_is_busy(spi)) tight_loop_contents(); // Wait for SPI to finish
+        // Wait for SPI to finish
+        while (spi_is_busy(spi)) tight_loop_contents(); 
+        
         gpio_put(pin_cs, 1); // Deselect the display
+        
         dma_transfer_in_progress = false; // Mark transfer as complete
+        
         gpio_put(DEBUG_PIN, 0);
+        // Notify caller
+        if (callback_receiver) {
+            callback_receiver->on_dma_complete();
+        }
     }
 }
 
@@ -89,6 +97,7 @@ void ST7789::init_hw() {
     irq_set_exclusive_handler(DMA_IRQ_0, ST7789::dma_irq_handler_static);
     irq_set_enabled(DMA_IRQ_0, true);
 }
+
 void ST7789::init() {
     init_hw();
 
@@ -120,9 +129,14 @@ void ST7789::init() {
     clear_screen();//(0x07E0); // Clear to green for testing
 }
 
+void ST7789::set_callback(DMA_Callback* cb) {
+    callback_receiver = cb;
+}
+
 void ST7789::sleep_out() {
     send_cmd(0x11); // Sleep Out
 }
+
 void ST7789::update(const uint8_t* data, size_t len, int32_t x1, int32_t y1, int32_t x2, int32_t y2) {
     // TODO: fix this
     while (dma_transfer_in_progress) { tight_loop_contents(); }
@@ -135,6 +149,7 @@ void ST7789::update(const uint8_t* data, size_t len, int32_t x1, int32_t y1, int
 }
 
 void ST7789::clear_screen(uint16_t color) {
+    return;
     while (dma_transfer_in_progress) { tight_loop_contents(); }
 
     // First block takes 5.6us

@@ -28,3 +28,5 @@ mon rtt cb
 
 Kør og afslut GDB
 arm-none-eabi-gdb --batch -x F:\git\electronics\modular-midi\projects\hub-master\flash_and_run.gdb F:\git\electronics\modular-midi\build\projects\hub-master\hub_master.elf
+
+arm-none-eabi-gdb F:\git\electronics\modular-midi\build\projects\hub-master\hub_master.elf

@@ -6,6 +6,7 @@
 #include "hardware/dma.h"
 #include "hardware/gpio.h"
 #include "pico/stdlib.h"
+#include "dma_callback.h"
 
 /*
     In the constructor we initialize IO pins and the display offsets in the displaycontroller memory map. 
@@ -29,7 +30,7 @@ public:
     // External API
     void init();
     void display_on();
-    void set_dma_complete_cb(dma_callback_t cb, void* data);
+    void set_callback(DMA_Callback* cb);
 
     void clear_screen(uint16_t color = 0x0000); // Default to black
     void update(const uint8_t* data, size_t len, int32_t x1, int32_t y1, int32_t x2, int32_t y2);
@@ -53,6 +54,7 @@ private:
     const uint16_t X_OFFSET;
     dma_callback_t dma_complete_cb = nullptr;
     void* dma_cb_user_data = nullptr;
+    DMA_Callback* callback_receiver = nullptr;
 
     // Internal helpers
     void init_hw();

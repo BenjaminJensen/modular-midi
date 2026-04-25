@@ -108,7 +108,8 @@ void display_task(void) {
         gpio_put(LED_PIN, 0);
         busy_wait_ms(25);
         color = get_rainbow_color(pos);
-        display.clear_screen(color); // Clear to red for testing
+        //display.clear_screen(color); // Clear to red for testing
+        display.task(); // This will trigger the LVGL flush callback, which updates the display with the current draw buffer content
         pos++;
         
     }
