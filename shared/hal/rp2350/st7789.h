@@ -43,7 +43,7 @@ private:
     void set_memory_write();
     void set_data_access(uint8_t format);
     void send_cmd(uint8_t cmd);
-    void send_data(const uint8_t* data, size_t len);
+    void send_data(const uint16_t* data, size_t len);
     void send_data(uint8_t data);
     
     // Sets the column and row address window for ST7789

@@ -154,7 +154,7 @@ void ST7789::clear_screen(uint16_t color) {
     
     // Blast the data to the display
     for (int y = 0; y < phys_height; y++) {
-        send_data((const uint8_t*)disp_row, sizeof(disp_row));
+        send_data(disp_row, phys_width); // Each entry in disp_row is 2 pixels
     }
 }
 
@@ -210,7 +210,7 @@ void ST7789::send_cmd(uint8_t cmd) {
     spi_set_format(spi, 16, SPI_CPOL_1, SPI_CPHA_1, SPI_MSB_FIRST);
 }
 
-void ST7789::send_data(const uint8_t* data, size_t len) {
+void ST7789::send_data(const uint16_t* data, size_t len) {
     // Wait for any previous DMA transfer to finish.
     while (dma_transfer_in_progress) {
         tight_loop_contents();
@@ -223,7 +223,7 @@ void ST7789::send_data(const uint8_t* data, size_t len) {
     // Configure and start the DMA transfer
     dma_channel_set_read_addr(dma_channel, data, false);
     // Since DMA is 16-bit, transfer count is halved
-    dma_channel_set_trans_count(dma_channel, len / 2, true); // The 'true' triggers the transfer
+    dma_channel_set_trans_count(dma_channel, len, true); // The 'true' triggers the transfer
 }
 
 void ST7789::send_data(uint8_t data) {
@@ -248,13 +248,13 @@ void ST7789::set_window(int32_t x1, int32_t y1, int32_t x2, int32_t y2) {
     static uint16_t x_data[2];
     x_data[0] = (uint16_t)x1;
     x_data[1] = (uint16_t)x2;
-    send_data((const uint8_t*)x_data, sizeof(x_data));
+    send_data(x_data, 2);
 
     send_cmd(0x2B); // RASET (Row Address Set)
     static uint16_t y_data[2];
     y_data[0] = (uint16_t)y1;
     y_data[1] = (uint16_t)y2;
-    send_data((const uint8_t*)y_data, sizeof(y_data));
+    send_data(y_data, 2);
 }
 
 void ST7789::display_on() {
