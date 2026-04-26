@@ -7,9 +7,6 @@ class Display : public DMA_Callback {
 public:
     Display();
     void init();
-    void clear_screen(uint16_t color = 0x0000) {
-        st7789.clear_screen(color);
-    }
 
     void task() ;
     // This is the actual function that runs

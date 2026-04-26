@@ -3,7 +3,7 @@
 // Screen defines
 #define SCREEN_WIDTH  284
 #define SCREEN_HEIGHT 76
-#define DRAW_BUF_SIZE (SCREEN_WIDTH * SCREEN_HEIGHT ) // 50% of screen, 16-bit
+#define DRAW_BUF_SIZE (SCREEN_WIDTH * SCREEN_HEIGHT * 2) // 100% of screen, 16-bit
 
 
 // Static draw buffer in RP2350 RAM

@@ -9,8 +9,6 @@ static ST7789* dma_irq_instance = nullptr;
 const uint16_t phys_width  = 284;
 const uint16_t phys_height = 76;
 
-uint16_t disp_row[phys_width];
-
 const uint DEBUG_PIN = 13;
 
 // The static ISR that calls the instance-specific handler
@@ -125,8 +123,6 @@ void ST7789::init() {
     // Exit sleep mode and prepare to receive pixel data
     set_mode_on();
     sleep_ms(150);
-
-    clear_screen();//(0x07E0); // Clear to green for testing
 }
 
 void ST7789::set_callback(DMA_Callback* cb) {
@@ -146,38 +142,6 @@ void ST7789::update(const uint8_t* data, size_t len, int32_t x1, int32_t y1, int
     set_memory_write();
 
     send_data(data, len);
-}
-
-void ST7789::clear_screen(uint16_t color) {
-    return;
-    while (dma_transfer_in_progress) { tight_loop_contents(); }
-
-    // First block takes 5.6us
-    gpio_put(DEBUG_PIN, 1);
-
-    // Target the physical glass location in RAM
-    set_window(X_OFFSET, Y_OFFSET, X_OFFSET + phys_width - 1, Y_OFFSET + phys_height - 1);
-    set_memory_write();
-
-    gpio_put(DEBUG_PIN, 0);
-    
-    // Optimization: Write 4 bytes (2 pixels) per loop iteration
-    // 12 us optimized
-    uint32_t* row_ptr32 = (uint32_t*)disp_row;
-    uint32_t two_pixels = (color << 16) | color; // Pack two 16-bit pixels
-
-    // Unrolled 32-bit fill (8 bytes per loop)
-    for (int i = 0; i < (phys_width / 2); i += 2) {
-        row_ptr32[i]     = two_pixels;
-        row_ptr32[i + 1] = two_pixels;
-    }
-
-    gpio_put(DEBUG_PIN, 1);
-    
-    // Blast the data to the display
-    for (int y = 0; y < phys_height; y++) {
-        send_data((const uint8_t*)disp_row, sizeof(disp_row));
-    }
 }
 
 void ST7789::set_pixel_format(uint8_t format) {
