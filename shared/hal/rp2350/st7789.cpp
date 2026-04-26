@@ -124,6 +124,7 @@ void ST7789::sleep_out() {
 }
 
 void ST7789::clear_screen(uint16_t color) {
+    static uint8_t tick = 0;
     while (dma_transfer_in_progress) { tight_loop_contents(); }
 
     // --- ADJUST THESE UNTIL THE NOISE DISAPPEARS ---
@@ -134,7 +135,40 @@ void ST7789::clear_screen(uint16_t color) {
     gpio_put(DEBUG_PIN, 1);
 
     // Target the physical glass location in RAM
-    set_window(X_OFFSET, Y_OFFSET, X_OFFSET + phys_width - 1, Y_OFFSET + phys_height - 1);
+    
+    switch (tick)
+    {
+        case 0:
+            // Lower right
+            set_window(X_OFFSET + phys_width / 2, Y_OFFSET + phys_height / 2, X_OFFSET + phys_width - 1, Y_OFFSET + phys_height - 1);
+            break;
+        case 1:
+            // Lower left
+            set_window(X_OFFSET, Y_OFFSET + phys_height / 2, X_OFFSET + phys_width / 2 - 1, Y_OFFSET + phys_height - 1);
+            break;
+        case 2:
+            // Upper right
+            set_window(X_OFFSET + phys_width / 2, Y_OFFSET, X_OFFSET + phys_width - 1, Y_OFFSET + phys_height / 2 - 1);
+            break;
+        default:
+            // Upper left
+            set_window(X_OFFSET, Y_OFFSET, X_OFFSET + phys_width / 2 - 1, Y_OFFSET + phys_height / 2 - 1);
+            break;
+    }
+    tick = (tick + 1) % 4;
+    
+    // Lower right
+    //set_window(X_OFFSET + phys_width / 2, Y_OFFSET + phys_height / 2, X_OFFSET + phys_width - 1, Y_OFFSET + phys_height - 1);
+    
+    // Lower left
+    //set_window(X_OFFSET, Y_OFFSET + phys_height / 2, X_OFFSET + phys_width / 2 - 1, Y_OFFSET + phys_height - 1);
+    
+    // Upper right
+    //set_window(X_OFFSET + phys_width / 2, Y_OFFSET, X_OFFSET + phys_width - 1, Y_OFFSET + phys_height / 2 - 1);
+
+    // Upper left
+    //set_window(X_OFFSET, Y_OFFSET, X_OFFSET + phys_width / 2 - 1, Y_OFFSET + phys_height / 2 - 1);
+
     set_memory_write();
 
     gpio_put(DEBUG_PIN, 0);
@@ -145,7 +179,7 @@ void ST7789::clear_screen(uint16_t color) {
     uint32_t two_pixels = (color << 16) | color; // Pack two 16-bit pixels
 
     // Unrolled 32-bit fill (8 bytes per loop)
-    for (int i = 0; i < (phys_width / 2); i += 2) {
+    for (int i = 0; i < (phys_width / 4); i += 2) {
         row_ptr32[i]     = two_pixels;
         row_ptr32[i + 1] = two_pixels;
     }
@@ -153,8 +187,8 @@ void ST7789::clear_screen(uint16_t color) {
     gpio_put(DEBUG_PIN, 1);
     
     // Blast the data to the display
-    for (int y = 0; y < phys_height; y++) {
-        send_data(disp_row, phys_width); // Each entry in disp_row is 2 pixels
+    for (int y = 0; y < phys_height/2; y++) {
+        send_data(disp_row, phys_width/2); // Each entry in disp_row is 2 pixels
     }
 }
 
