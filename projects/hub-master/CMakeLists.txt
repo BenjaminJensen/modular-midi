@@ -17,7 +17,7 @@ pico_enable_stdio_uart(hub_master 0)
 # Link the actual libraries, including the shared interface library
 target_link_libraries(hub_master PRIVATE
     pico_stdlib 
-    FreeRTOS-Kernel-Heap4
+    FreeRTOS-Kernel
     shared
     pico_multicore
     lvgl

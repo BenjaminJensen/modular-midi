@@ -3,6 +3,7 @@ add_library(shared STATIC
     hal/rp2350/st7789.cpp
     hal/rp2350/AsyncLogger.cpp
     hal/rp2350/display.cpp
+    freertos_support.cpp
     ${CMAKE_CURRENT_LIST_DIR}/../libs/RTT/RTT/SEGGER_RTT.c
     ${CMAKE_CURRENT_LIST_DIR}/../libs/RTT/RTT/SEGGER_RTT_printf.c
 )
@@ -20,4 +21,5 @@ target_link_libraries(shared PUBLIC
     hardware_gpio 
     hardware_dma 
     lvgl
+    FreeRTOS-Kernel
 )

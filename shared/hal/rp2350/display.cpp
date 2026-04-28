@@ -31,14 +31,36 @@ void Display::init() {
     add_repeating_timer_ms(5, lv_tick_timer_callback, NULL, &lvgl_tick_timer);
 }
 
+static lv_obj_t * label; 
+static int counter = 0;
+
+void Display::task() {
+    if (!tmp) {
+        lv_obj_set_style_bg_color(lv_screen_active(), lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+        
+        // 2. Create the label only ONCE
+        label = lv_label_create(lv_screen_active());
+        lv_obj_set_style_text_color(label, lv_color_hex(0x00ff00), LV_PART_MAIN);
+        lv_obj_align(label, LV_ALIGN_CENTER, 0, 0);
+        
+        tmp = true;
+    }
+
+    // 3. Update the text every iteration (or use a timer to slow it down)
+    // lv_label_set_text_fmt works like printf
+    lv_label_set_text_fmt(label, "Cnt: %d", counter++);
+
+    lv_timer_handler();
+}
+/*
 void Display::task() {
     //while (true) 
     {
         if (!tmp) {
-        /*Change the active screen's background color*/
+        
             lv_obj_set_style_bg_color(lv_screen_active(), lv_color_hex(0xFFFFFF), LV_PART_MAIN);
 
-            /*Create a white label, set its text and align it to the center*/
+            
             lv_obj_t * label = lv_label_create(lv_screen_active());
             lv_label_set_text(label, "Hello world");
             lv_obj_set_style_text_color(lv_screen_active(), lv_color_hex(0x00ff00), LV_PART_MAIN);
@@ -48,7 +70,7 @@ void Display::task() {
         lv_timer_handler();
     }
 }
-
+*/
 lv_display_t * Display::lvgl_setup() {
     lv_init();
 
