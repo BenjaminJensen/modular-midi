@@ -125,6 +125,7 @@ int main() {
     Logger::init();
 
     // Now you can log freely!
+    
     Logger::log("System starting up...\n");
     Logger::log("Running on Core: %d\n", get_core_num());
     Logger::log("String test: %s\n", "Hello World!");

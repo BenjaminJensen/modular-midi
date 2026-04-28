@@ -3,7 +3,8 @@
 // Screen defines
 #define SCREEN_WIDTH  284
 #define SCREEN_HEIGHT 76
-#define DRAW_BUF_SIZE (SCREEN_WIDTH * SCREEN_HEIGHT * 2) // 100% of screen, 16-bit
+//#define DRAW_BUF_SIZE (SCREEN_WIDTH * SCREEN_HEIGHT * 2) // 100% of screen, 16-bit
+#define DRAW_BUF_SIZE (SCREEN_WIDTH * SCREEN_HEIGHT ) // 50% of screen, 16-bit
 
 
 // Static draw buffer in RP2350 RAM
@@ -73,7 +74,7 @@ void Display::lv_flush(lv_display_t * disp, const lv_area_t * area, uint8_t * px
     // Calculate the number of pixels in the area
     size_t pixel_count = (area->x2 - area->x1 + 1) * (area->y2 - area->y1 + 1);
     // Update the display with the pixel data for the specified area
-    st7789.update(px_map, pixel_count * 2, area->x1, area->y1, area->x2, area->y2);
+    st7789.update((const uint16_t*)px_map, pixel_count, area->x1, area->y1, area->x2, area->y2);
 }
 void Display::lv_flush_wrapper(lv_display_t * disp, const lv_area_t * area, uint8_t * px_map) {
     // Get instance pointer from user data

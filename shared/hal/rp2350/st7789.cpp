@@ -133,15 +133,15 @@ void ST7789::sleep_out() {
     send_cmd(0x11); // Sleep Out
 }
 
-void ST7789::update(const uint8_t* data, size_t len, int32_t x1, int32_t y1, int32_t x2, int32_t y2) {
+void ST7789::update(const uint16_t* data, size_t len, int32_t x1, int32_t y1, int32_t x2, int32_t y2) {
     // TODO: fix this
     while (dma_transfer_in_progress) { tight_loop_contents(); }
-
+    
     // Target the physical glass location in RAM
     set_window(X_OFFSET + x1, Y_OFFSET + y1, X_OFFSET + x2, Y_OFFSET + y2);
     set_memory_write();
 
-    send_data(data, len);
+    send_data(data, len); // len is in pixels, but we need byte count for RGB565
 }
 
 void ST7789::set_pixel_format(uint8_t format) {
@@ -196,7 +196,7 @@ void ST7789::send_cmd(uint8_t cmd) {
     spi_set_format(spi, 16, SPI_CPOL_1, SPI_CPHA_1, SPI_MSB_FIRST);
 }
 
-void ST7789::send_data(const uint8_t* data, size_t len) {
+void ST7789::send_data(const uint16_t* data, size_t len) {
     // Wait for any previous DMA transfer to finish.
     while (dma_transfer_in_progress) {
         tight_loop_contents();
@@ -208,8 +208,8 @@ void ST7789::send_data(const uint8_t* data, size_t len) {
     dma_transfer_in_progress = true;
     // Configure and start the DMA transfer
     dma_channel_set_read_addr(dma_channel, data, false);
-    // Since DMA is 16-bit, transfer count is halved
-    dma_channel_set_trans_count(dma_channel, len / 2, true); // The 'true' triggers the transfer
+    
+    dma_channel_set_trans_count(dma_channel, len, true); // The 'true' triggers the transfer
 }
 
 void ST7789::send_data(uint8_t data) {
@@ -234,15 +234,48 @@ void ST7789::set_window(int32_t x1, int32_t y1, int32_t x2, int32_t y2) {
     static uint16_t x_data[2];
     x_data[0] = (uint16_t)x1;
     x_data[1] = (uint16_t)x2;
-    send_data((const uint8_t*)x_data, sizeof(x_data));
+    send_data(x_data, 2);
 
     send_cmd(0x2B); // RASET (Row Address Set)
     static uint16_t y_data[2];
     y_data[0] = (uint16_t)y1;
     y_data[1] = (uint16_t)y2;
-    send_data((const uint8_t*)y_data, sizeof(y_data));
+    send_data(y_data, 2);
 }
+/*
+void ST7789::set_window(int32_t x1, int32_t y1, int32_t x2, int32_t y2) {
+    // 1. Column Address Set (0x2A)
+    send_cmd(0x2A);
+    
+    // We must stay in 8-bit mode for parameters to avoid the 16-bit swap
+    spi_set_format(spi, 8, SPI_CPOL_1, SPI_CPHA_1, SPI_MSB_FIRST);
+    gpio_put(pin_cs, 0);
+    gpio_put(pin_dc, 1); // Data mode
+    
+    uint8_t x_params[4] = {
+        (uint8_t)(x1 >> 8), (uint8_t)(x1 & 0xFF),
+        (uint8_t)(x2 >> 8), (uint8_t)(x2 & 0xFF)
+    };
+    spi_write_blocking(spi, x_params, 4);
+    gpio_put(pin_cs, 1);
 
+    // 2. Row Address Set (0x2B)
+    send_cmd(0x2B);
+    
+    gpio_put(pin_cs, 0);
+    gpio_put(pin_dc, 1);
+    
+    uint8_t y_params[4] = {
+        (uint8_t)(y1 >> 8), (uint8_t)(y1 & 0xFF),
+        (uint8_t)(y2 >> 8), (uint8_t)(y2 & 0xFF)
+    };
+    spi_write_blocking(spi, y_params, 4);
+    gpio_put(pin_cs, 1);
+
+    // Restore 16-bit SPI for the actual pixel DMA later
+    spi_set_format(spi, 16, SPI_CPOL_1, SPI_CPHA_1, SPI_MSB_FIRST);
+}
+*/
 void ST7789::display_on() {
     send_cmd(0x29); // DISPON (Display On)
     sleep_ms(100);

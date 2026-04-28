@@ -32,7 +32,7 @@ public:
     void display_on();
     void set_callback(DMA_Callback* cb);
 
-    void update(const uint8_t* data, size_t len, int32_t x1, int32_t y1, int32_t x2, int32_t y2);
+    void update(const uint16_t* data, size_t len, int32_t x1, int32_t y1, int32_t x2, int32_t y2);
 
 private:
     // Hardware Configuration
@@ -57,7 +57,7 @@ private:
     void set_pixel_format(uint8_t format);
     void set_mode_on();
     void set_data_access(uint8_t format);
-    void send_data(const uint8_t* data, size_t len);
+    void send_data(const uint16_t* data, size_t len);
     void send_data(uint8_t data);
     void send_cmd(uint8_t cmd);
     void set_window(int32_t x1, int32_t y1, int32_t x2, int32_t y2);
