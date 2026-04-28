@@ -60,7 +60,7 @@ private:
     void send_data(const uint16_t* data, size_t len);
     void send_data(uint8_t data);
     void send_cmd(uint8_t cmd);
-    void set_window(int32_t x1, int32_t y1, int32_t x2, int32_t y2);
+    void set_window(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2);
     void set_memory_write();
     
 private:

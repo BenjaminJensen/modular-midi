@@ -138,7 +138,7 @@ void ST7789::update(const uint16_t* data, size_t len, int32_t x1, int32_t y1, in
     while (dma_transfer_in_progress) { tight_loop_contents(); }
     
     // Target the physical glass location in RAM
-    set_window(X_OFFSET + x1, Y_OFFSET + y1, X_OFFSET + x2, Y_OFFSET + y2);
+    set_window((uint16_t)x1, (uint16_t)y1,  (uint16_t)x2,  (uint16_t)y2);
     set_memory_write();
 
     send_data(data, len); // len is in pixels, but we need byte count for RGB565
@@ -227,13 +227,18 @@ void ST7789::send_data(uint8_t data) {
     spi_set_format(spi, 16, SPI_CPOL_1, SPI_CPHA_1, SPI_MSB_FIRST);
 }
 
-void ST7789::set_window(int32_t x1, int32_t y1, int32_t x2, int32_t y2) {
+void ST7789::set_window(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2) {
      // Wait for any DMA transfer to finish before using SPI directly
     while (dma_transfer_in_progress) {
         tight_loop_contents();
     }
-    
+    // Adjust coordinates for display memory offsets
+    uint16_t x1_adjusted = X_OFFSET + x1;
+    uint16_t x2_adjusted = X_OFFSET + x2;
+    uint16_t y1_adjusted = Y_OFFSET + y1;
+    uint16_t y2_adjusted = Y_OFFSET + y2;
     uint8_t cmd = 0x2A;
+
     // Temporarily switch to 8-bit SPI for command
     spi_set_format(spi, 8, SPI_CPOL_1, SPI_CPHA_1, SPI_MSB_FIRST);
     
@@ -245,8 +250,8 @@ void ST7789::set_window(int32_t x1, int32_t y1, int32_t x2, int32_t y2) {
     spi_write_blocking(spi, &cmd, 1); // CASET (Column Address Set)
     
     static uint16_t x_data[2];
-    x_data[0] = __builtin_bswap16((uint16_t)x1);
-    x_data[1] = __builtin_bswap16((uint16_t)x2); // Removed the +1, LVGL and ST7789 are both inclusive
+    x_data[0] = __builtin_bswap16(x1_adjusted);
+    x_data[1] = __builtin_bswap16(x2_adjusted); // Removed the +1, LVGL and ST7789 are both inclusive
 
     // DC high for data
     gpio_put(pin_dc, 1); 
@@ -259,8 +264,8 @@ void ST7789::set_window(int32_t x1, int32_t y1, int32_t x2, int32_t y2) {
     spi_write_blocking(spi, &cmd, 1); // CASET (Column Address Set)
 
     static uint16_t y_data[2];
-    y_data[0] = __builtin_bswap16((uint16_t)y1);
-    y_data[1] = __builtin_bswap16((uint16_t)y2); // Removed the +1, LVGL and ST7789 are both inclusive
+    y_data[0] = __builtin_bswap16(y1_adjusted);
+    y_data[1] = __builtin_bswap16(y2_adjusted); // Removed the +1, LVGL and ST7789 are both inclusive
 
     // DC high for data
     gpio_put(pin_dc, 1); 
@@ -273,7 +278,7 @@ void ST7789::set_window(int32_t x1, int32_t y1, int32_t x2, int32_t y2) {
     spi_set_format(spi, 16, SPI_CPOL_1, SPI_CPHA_1, SPI_MSB_FIRST);
 
     //send_data(y_data, 2);
-    LOG_DEBUG("Set window: (%d, %d) to (%d, %d)\n", x1, y1, x2, y2);
+    LOG_DEBUG("Set window: (%d, %d) to (%d, %d)\n", x1_adjusted, y1_adjusted, x2_adjusted, y2_adjusted);
 }
 /*
 void ST7789::set_window(int32_t x1, int32_t y1, int32_t x2, int32_t y2) {
