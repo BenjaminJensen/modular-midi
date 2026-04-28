@@ -237,8 +237,7 @@ void ST7789::set_window(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2) {
     uint16_t x2_adjusted = X_OFFSET + x2;
     uint16_t y1_adjusted = Y_OFFSET + y1;
     uint16_t y2_adjusted = Y_OFFSET + y2;
-    uint8_t cmd = 0x2A;
-
+    
     // Temporarily switch to 8-bit SPI for command
     spi_set_format(spi, 8, SPI_CPOL_1, SPI_CPHA_1, SPI_MSB_FIRST);
     
@@ -246,10 +245,12 @@ void ST7789::set_window(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2) {
     gpio_put(pin_cs, 0); 
     // DC low for command
     gpio_put(pin_dc, 0); 
-
-    spi_write_blocking(spi, &cmd, 1); // CASET (Column Address Set)
     
-    static uint16_t x_data[2];
+    // CASET (Column Address Set)
+    uint8_t cmd = 0x2A;
+    spi_write_blocking(spi, &cmd, 1);
+    
+    uint16_t x_data[2];
     x_data[0] = __builtin_bswap16(x1_adjusted);
     x_data[1] = __builtin_bswap16(x2_adjusted); // Removed the +1, LVGL and ST7789 are both inclusive
 
@@ -263,7 +264,7 @@ void ST7789::set_window(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2) {
     gpio_put(pin_dc, 0);
     spi_write_blocking(spi, &cmd, 1); // CASET (Column Address Set)
 
-    static uint16_t y_data[2];
+    uint16_t y_data[2];
     y_data[0] = __builtin_bswap16(y1_adjusted);
     y_data[1] = __builtin_bswap16(y2_adjusted); // Removed the +1, LVGL and ST7789 are both inclusive
 
