@@ -102,7 +102,7 @@ void display_task(void) {
     uint8_t pos = 0;
     for(;;) {
         
-        Logger::log("Display task\n");
+        //Logger::log("Display task\n");
         gpio_put(LED_PIN, 1);
         busy_wait_ms(25);
         gpio_put(LED_PIN, 0);

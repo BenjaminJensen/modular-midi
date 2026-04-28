@@ -228,19 +228,56 @@ void ST7789::send_data(uint8_t data) {
 }
 
 void ST7789::set_window(int32_t x1, int32_t y1, int32_t x2, int32_t y2) {
+    busy_wait_ms(5);
     send_cmd(0x2A); // CASET (Column Address Set)
+    busy_wait_ms(5);
+
+
 
     // These two buffers are static as they are transfered with dma, this i s not good design and needs to be reworked
+    
     static uint16_t x_data[2];
-    x_data[0] = (uint16_t)x1;
-    x_data[1] = (uint16_t)x2;
-    send_data(x_data, 2);
+       // Use __builtin_bswap16 to flip from Little Endian to Big Endian
+    x_data[0] = __builtin_bswap16((uint16_t)x1);
+    x_data[1] = __builtin_bswap16((uint16_t)x2); // Removed the +1, LVGL and ST7789 are both inclusive
+    //x_data[0] = (uint16_t)x1;
+    //x_data[1] = (uint16_t)x2;
 
+    gpio_put(pin_dc, 1); // DC high for data
+    gpio_put(pin_cs, 0);
+    busy_wait_ms(5);
+
+    spi_set_format(spi, 8, SPI_CPOL_1, SPI_CPHA_1, SPI_MSB_FIRST);
+    spi_write_blocking(spi, (const uint8_t*)x_data, 4);
+    spi_set_format(spi, 16, SPI_CPOL_1, SPI_CPHA_1, SPI_MSB_FIRST);
+    
+    gpio_put(pin_cs, 1);
+    
+    busy_wait_ms(5);
     send_cmd(0x2B); // RASET (Row Address Set)
+    busy_wait_ms(5);
+
     static uint16_t y_data[2];
-    y_data[0] = (uint16_t)y1;
-    y_data[1] = (uint16_t)y2;
-    send_data(y_data, 2);
+    // Use __builtin_bswap16 to flip from Little Endian to Big Endian
+    y_data[0] = __builtin_bswap16((uint16_t)y1);
+    y_data[1] = __builtin_bswap16((uint16_t)y2); // Removed the +1, LVGL and ST7789 are both inclusive
+    //y_data[0] = ((uint16_t)y1);
+    //y_data[1] = ((uint16_t)y2);
+
+
+    gpio_put(pin_dc, 1); // DC high for data
+    gpio_put(pin_cs, 0);
+    busy_wait_ms(5);
+
+    spi_set_format(spi, 8, SPI_CPOL_1, SPI_CPHA_1, SPI_MSB_FIRST);
+    spi_write_blocking(spi, (const uint8_t*)y_data, 4);
+    spi_set_format(spi, 16, SPI_CPOL_1, SPI_CPHA_1, SPI_MSB_FIRST);
+
+    gpio_put(pin_cs, 1);
+    busy_wait_ms(5);
+
+    //send_data(y_data, 2);
+    LOG_DEBUG("Set window: (%d, %d) to (%d, %d)\n", x1, y1, x2, y2);
 }
 /*
 void ST7789::set_window(int32_t x1, int32_t y1, int32_t x2, int32_t y2) {
