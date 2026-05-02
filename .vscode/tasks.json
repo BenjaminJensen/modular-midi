@@ -1,0 +1,23 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "J-Link: Flash RP2350",
+            "type": "shell",
+            "command": "JLinkExe", 
+            "args": [
+                "-device", "RP2350_M33_0",
+                "-if", "SWD",
+                "-speed", "15000",
+                "-autoconnect", "1",
+                "-ExitOnError", "1",
+                "-CommandFile", "${workspaceFolder}/flash.jlink"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": false
+            },
+            "problemMatcher": []
+        }
+    ]
+}
