@@ -4,14 +4,14 @@
         {
             "label": "J-Link: Flash RP2350",
             "type": "shell",
-            "command": "JLinkExe", 
+            "command": "JLink.exe", 
             "args": [
                 "-device", "RP2350_M33_0",
                 "-if", "SWD",
-                "-speed", "15000",
+                "-speed", "1500",
                 "-autoconnect", "1",
                 "-ExitOnError", "1",
-                "-CommandFile", "${workspaceFolder}/flash.jlink"
+                "-CommandFile", "${workspaceFolder}/tools/flash.jlink"
             ],
             "group": {
                 "kind": "build",
