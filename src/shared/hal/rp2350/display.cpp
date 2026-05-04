@@ -1,10 +1,10 @@
 #include "display.h"
-
+#include <stdio.h>
 // Screen defines
 #define SCREEN_WIDTH  284
 #define SCREEN_HEIGHT 76
-//#define DRAW_BUF_SIZE (SCREEN_WIDTH * SCREEN_HEIGHT * 2) // 100% of screen, 16-bit
-#define DRAW_BUF_SIZE (SCREEN_WIDTH * SCREEN_HEIGHT ) // 50% of screen, 16-bit
+#define DRAW_BUF_SIZE (SCREEN_WIDTH * SCREEN_HEIGHT * 2) // 100% of screen, 16-bit
+//#define DRAW_BUF_SIZE (SCREEN_WIDTH * SCREEN_HEIGHT ) // 50% of screen, 16-bit
 
 
 // Static draw buffer in RP2350 RAM
@@ -33,6 +33,7 @@ void Display::init() {
 
 static lv_obj_t * label; 
 static int counter = 0;
+static char buf[32];
 
 void Display::task() {
     if (!tmp) {
@@ -48,8 +49,9 @@ void Display::task() {
 
     // 3. Update the text every iteration (or use a timer to slow it down)
     // lv_label_set_text_fmt works like printf
-    lv_label_set_text_fmt(label, "Cnt: %d", counter++);
-
+    snprintf(buf, sizeof(buf), "Cnt: %d", counter++);
+    lv_label_set_text_static(label, buf);
+    if(counter > 999999) counter = 0; // Just to prevent overflow in this example
     lv_timer_handler();
 }
 /*

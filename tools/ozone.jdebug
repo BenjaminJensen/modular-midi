@@ -34,7 +34,9 @@ void OnProjectLoad (void) {
   //
   // User settings
   //
+  Project.SetOSPlugin ("FreeRTOSPlugin_Cortex-M");
   File.Open ("$(ProjectDir)/../build/src/projects/hub-master/hub_master.elf");
+
 }
 
 /*********************************************************************
@@ -63,6 +65,11 @@ void OnProjectLoad (void) {
 *
 **********************************************************************
 */
+
+void Target.Reset (void) {
+  Target.SetResetStrategy(2); // Set to specific strategy (e.g., 0, 1, 2)
+  Target.Reset();
+}
 //void TargetReset (void) {
 //
 //  unsigned int SP;

@@ -1,11 +1,13 @@
 r
 loadfile build/src/projects/hub-master/hub_master.elf
+
+# Set the reset strategy to 'Hardware'
+# Strategy 2: Resets the target via the RESET pin
+RSetType 2
+
+# Perform the reset and halt
 r
-# Manually clear the Debug Halting Control and Status Register (DHCSR)
-# This effectively tells the silicon "Stop looking for a debugger"
-w4 0xE000EDF0, 0xA05F0000
-# Clear the DEMCR (Debug Exception and Monitor Control Register)
-w4 0xE000EDFC, 0x00000000
+
 g
 sleep 100
 qc

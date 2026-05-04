@@ -5,10 +5,15 @@
 #include <cstdio>
 #include "AsyncLogger.h"
 #include "display.h"
-
+#include "services/button_service.h"
+#include "hal/rp2350/pin.h"
 // Statically instantiate the display using the default pins defined in the header
 
 static Display display;
+static ButtonService button_service;
+
+static Pin button_pin(28); // Example pin number
+static Button button(&button_pin, 500); // 500ms long press threshold
 
 void blink_task(void *pvParameters) {
     const uint LED_PIN = 0;
@@ -42,9 +47,11 @@ void display_task(void) {
   //      busy_wait_ms(5);
         gpio_put(LED_PIN, 1);
 //        busy_wait_ms(5);
-        gpio_put(LED_PIN, 0);
         //display.clear_screen(color); // Clear to red for testing
-        display.task(); // This will trigger the LVGL flush callback, which updates the display with the current draw buffer content        
+        display.task(); // This will trigger the LVGL flush callback, which updates the display with the current draw buffer content    
+        
+        busy_wait_ms(1);
+        gpio_put(LED_PIN, 0);    
     }
 }
 
@@ -54,6 +61,10 @@ StaticTask_t xTaskBuffer;
 StackType_t xStack[configMINIMAL_STACK_SIZE];
 
 int main() {
+
+    button_service.add_button(&button);
+    button_service.start(1);
+
     // This now wakes up the RTT driver instead of USB/UART
 
     // stdio_init_all();
