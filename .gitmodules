@@ -1,12 +1,12 @@
 [submodule "libs/pico-sdk"]
-	path = libs/pico-sdk
+	path = src/libs/pico-sdk
 	url = https://github.com/raspberrypi/pico-sdk.git
 [submodule "libs/FreeRTOS-Kernel"]
-	path = libs/FreeRTOS-Kernel
+	path = src/libs/FreeRTOS-Kernel
 	url = https://github.com/raspberrypi/FreeRTOS-Kernel.git
 [submodule "libs/lvgl"]
-	path = libs/lvgl
+	path = src/libs/lvgl
 	url = https://github.com/lvgl/lvgl.git
 [submodule "libs/RTT"]
-	path = libs/RTT
+	path = src/libs/RTT
 	url = https://github.com/SEGGERMicro/RTT

@@ -1,5 +1,5 @@
 r
-loadfile build/projects/hub-master/hub_master.elf
+loadfile build/src/projects/hub-master/hub_master.elf
 r
 # Manually clear the Debug Halting Control and Status Register (DHCSR)
 # This effectively tells the silicon "Stop looking for a debugger"
