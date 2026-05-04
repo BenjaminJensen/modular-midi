@@ -19,3 +19,6 @@ CMakeSettings.json
 # OS files
 Thumbs.db
 .DS_Store
+
+# Ozone files
+tools/*.jdebug.user

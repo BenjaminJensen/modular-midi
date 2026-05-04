@@ -30,11 +30,11 @@ void OnProjectLoad (void) {
   Project.SetTargetIF ("SWD");
   Project.SetTIFSpeed ("4 MHz");
   Project.AddSvdFile ("$(InstallDir)/Config/CPU/Cortex-M33F.svd");
-  Project.AddSvdFile ("F:/git/electronics/modular-midi/libs/pico-sdk/src/rp2350/hardware_regs/RP2350.svd");
+  Project.AddSvdFile ("F:/git/electronics/modular-midi/../src/libs/pico-sdk/src/rp2350/hardware_regs/RP2350.svd");
   //
   // User settings
   //
-  File.Open ("$(ProjectDir)/build/projects/hub-master/hub_master.elf");
+  File.Open ("$(ProjectDir)/../build/src/projects/hub-master/hub_master.elf");
 }
 
 /*********************************************************************
