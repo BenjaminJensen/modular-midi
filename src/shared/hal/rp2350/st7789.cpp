@@ -1,6 +1,6 @@
 #include "st7789.h"
 #include "pico/stdlib.h"
-#include "AsyncLogger.h"
+#include "async_logger.h"
 
 // A static pointer to the ST7789 instance for the ISR.
 // This allows the static ISR to call the instance-specific handler.

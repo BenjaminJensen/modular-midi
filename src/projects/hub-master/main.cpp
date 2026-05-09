@@ -3,7 +3,7 @@
 #include "FreeRTOS.h"
 #include "task.h"
 #include <cstdio>
-#include "AsyncLogger.h"
+#include "async_logger.h"
 #include "display.h"
 #include "services/button_service.h"
 #include "hal/rp2350/pin.h"
