@@ -1,7 +1,7 @@
 #include "lvgl.h"
 #include "pico/stdlib.h"
 #include "st7789.h"
-#include "dma_callback.h"
+#include "shared/dma_callback.h"
 
 class Display : public DMA_Callback {
 public:

@@ -4,6 +4,7 @@
 #include <cstdint>
 #include "i_pin.h"
 #include "async_logger.h"
+#include "services/button_payload.h"
 
 class Button {
 public:

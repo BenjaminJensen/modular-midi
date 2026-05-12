@@ -5,8 +5,8 @@
 #include <cstdio>
 #include "async_logger.h"
 #include "display.h"
-#include "services/button_service.h"
-#include "hal/rp2350/pin.h"
+#include "shared/services/button_service.h"
+#include "shared/hal/rp2350/pin.h"
 // Statically instantiate the display using the default pins defined in the header
 
 static Display display;

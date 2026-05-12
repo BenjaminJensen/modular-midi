@@ -1,6 +1,6 @@
 #pragma once
 
-#include "button.h"
+#include "shared/button.h"
 #include "FreeRTOS.h"
 #include "task.h"
 

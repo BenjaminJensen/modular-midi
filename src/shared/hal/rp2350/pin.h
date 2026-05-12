@@ -1,7 +1,7 @@
 #pragma once
 
 #include <cstdint>
-#include "i_pin.h"
+#include "shared/i_pin.h"
 #include "pico/stdlib.h"
 
 class Pin : public IPin {

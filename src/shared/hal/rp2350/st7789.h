@@ -6,7 +6,7 @@
 #include "hardware/dma.h"
 #include "hardware/gpio.h"
 #include "pico/stdlib.h"
-#include "dma_callback.h"
+#include "shared/dma_callback.h"
 
 /*
     In the constructor we initialize IO pins and the display offsets in the displaycontroller memory map. 
