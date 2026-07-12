@@ -1,32 +1,9 @@
-# RTT setup
+# RTT (logging) via Ozone
 
-## Start GDB
+RTT output (printf-style logging from the target) is viewed through SEGGER Ozone — there is no GDB/COM-port step.
 
-Kør GDB med "arm-none-eabi-gdb din_fil.elf"
+1. Open `tools/ozone.jdebug` in Ozone (see [tools/tools.md](tools/tools.md) for setup).
+2. Start a debug session (Download & Reset, or Attach).
+3. RTT output appears automatically in Ozone's **Terminal** window once the target is running.
 
-file F:/git/electronics/modular-midi/build/projects/hub-master/hub_master.elf
-F:\git\electronics\modular-midi\build\projects\hub-master\hub_master.elf
-
-
-target extended-remote \\.\COM5
-monitor swdp_scan
-attach 1
-
-## RTT gdb commands
-https://black-magic.org/usage/rtt.html
-
-monitor rtt status
-
-monitor rtt 
-monitor rtt enable
-
-print _SEGGER_RTT
-
-mon rtt cb
-
-# GDB
-
-Kør og afslut GDB
-arm-none-eabi-gdb --batch -x F:\git\electronics\modular-midi\projects\hub-master\flash_and_run.gdb F:\git\electronics\modular-midi\build\projects\hub-master\hub_master.elf
-
-arm-none-eabi-gdb F:\git\electronics\modular-midi\build\projects\hub-master\hub_master.elf
+RTT buffer configuration lives in [src/shared/hal/rp2350/SEGGER_RTT_Conf.h](src/shared/hal/rp2350/SEGGER_RTT_Conf.h).
