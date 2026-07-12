@@ -11,3 +11,8 @@ Ensure the JLink root folder is in the path variable:
     "PATH": "C:\\Program Files\\SEGGER\\JLink_V924a;${env:PATH}"
 }
 '''
+
+## Segger flash task
+1. ctrl+shift+p
+2. Type in "task run"
+3. Choose "J-Link: Flash RP2350"
