@@ -1,6 +1,6 @@
 # shared/hal/rp2350/CMakeLists.txt
 
-set(RTT_PATH "${CMAKE_CURRENT_LIST_DIR}/../../../libs/RTT/RTT")
+set(RTT_PATH "${CMAKE_SOURCE_DIR}/src/libs/RTT/RTT")
 
 target_sources(shared PRIVATE
     st7789.cpp
