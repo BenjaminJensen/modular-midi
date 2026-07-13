@@ -10,6 +10,7 @@ To build and debug this project, you will need the following tools installed:
 - **SEGGER J-Link software**: Provides `JLink.exe` used for flashing (see [tools/tools.md](tools/tools.md)).
 - **SEGGER Ozone**: The debugger used for this project (see [tools/tools.md](tools/tools.md) and `tools/ozone.jdebug`).
 - **MSYS2 (UCRT64 environment)**: Provides a native `g++`/`gdb`/`make` toolchain for the host-side unit tests under `tests/`, plus `clang-tidy` for linting — see [tools/tools.md](tools/tools.md) for install steps. Not needed for the firmware build itself.
+- **Docker** (optional): `docker/Dockerfile` bundles the ARM toolchain, a native compiler, and `clang-tidy` into one image, as an alternative to installing the tools above directly. Currently supplementary/being validated alongside the native toolchains, not yet the primary path — see `CLAUDE.md`'s Build section for the exact commands.
 
 ## FreeRTOS
 As of now 30th March 2026, the official version of FreeRTOS does not support the RP2350, therefore the submodule is to the raspberrypi maintained of FreeRTOS

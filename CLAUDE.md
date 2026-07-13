@@ -12,7 +12,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Build
 
-Requires `arm-none-eabi-gcc`, `ninja`, and `cmake` on PATH (see `build.ps1` for the exact toolchain paths this repo was set up with, and `setup.md` for the tool list). There is no build container yet.
+Requires `arm-none-eabi-gcc`, `ninja`, and `cmake` on PATH (see `build.ps1` for the exact toolchain paths this repo was set up with, and `setup.md` for the tool list).
 
 ```powershell
 ./build.ps1
@@ -26,6 +26,18 @@ cmake --build build
 ```
 
 Output ELF for the current project: `build/src/projects/hub-master/hub_master.elf` (also produces `.uf2`, `.bin`, `.map` via `pico_add_extra_outputs`).
+
+**`build/`'s `CMAKE_BUILD_TYPE` is `Debug`, but only because that got cached the first time this directory was configured** — neither `build.ps1` nor the command above ever passes `-DCMAKE_BUILD_TYPE`, and pico-sdk's own default (`src/libs/pico-sdk/cmake/pico_pre_load_toolchain.cmake`) is actually `Release`. A cache variable, once set, sticks across reconfigures regardless of that default. If `build/` is ever deleted and recreated, or a new build directory is configured, it will silently come back as `Release` (smaller/differently-optimized binary) unless `-DCMAKE_BUILD_TYPE=Debug` is passed explicitly. Don't assume the two are equivalent — they aren't (confirmed while validating the container below: an initial container build defaulted to `Release` and came out ~15% larger in `.text` than the native `Debug` build).
+
+### Container build (optional, transitional)
+
+A Docker image (`docker/Dockerfile`) mirrors this repo's full tool stack — ARM cross-compiler (pinned to the exact same toolchain release as the native Windows setup, ARM GNU Toolchain 14.3.rel1), plus a native `gcc`/`g++` and `clang-tidy` for the Testing/Linting workflows below — so the same image can eventually serve as both a local build environment and the CI image. **It's currently supplementary, not a replacement**: the native Windows/MSYS2 toolchains stay the primary documented path until the container's output has been validated for longer. Nothing about flashing/debugging changes or moves into the container — J-Link/Ozone need direct USB access, which containers can't do.
+
+```powershell
+./build-docker.ps1
+```
+
+Builds the image if it doesn't exist yet, then runs the firmware build inside it with the repo bind-mounted (no source is baked into the image). Output goes to `build-docker/`, **not** `build/` — a Windows-native and a Linux-container CMake configure can't safely share one build directory (`CMakeCache.txt` bakes in absolute compiler paths and ABI). `build-docker.ps1` passes `-DCMAKE_BUILD_TYPE=Debug` explicitly so its output matches `build/`'s current actual behavior (see above) rather than pico-sdk's undeclared `Release` default.
 
 ## Linting
 
@@ -51,6 +63,8 @@ Both build trees generate `compile_commands.json` (`CMAKE_EXPORT_COMPILE_COMMAND
   ```
   Without these, clang-tidy fails outright (`unknown target CPU 'armv8-m.main+fp+dsp'`, then `'cstdint' file not found`) rather than just misbehaving — if it errors like that, this is why.
 
+The same two flavors of command also run inside the container from the Build section above, with clang-18 and Linux paths (`/opt/arm-gnu-toolchain/arm-none-eabi/...` instead of `C:/Program Files (x86)/...`) — the underlying issue and fix are identical, just on a different filesystem. Still supplementary; MSYS2 stays primary for now.
+
 ## Testing
 
 Hardware-independent logic (currently just `Button`) has host-side unit tests under `tests/`, built with a native compiler — **not** `arm-none-eabi-gcc` — since it's a separate CMake project from the firmware build (the root `CMakeLists.txt` unconditionally pulls in pico-sdk before `project()`, so it can't produce a host binary). Tests use [doctest](https://github.com/doctest/doctest), vendored as a single header at `src/libs/doctest/doctest.h` (pinned to v2.4.11, not a submodule).
@@ -62,6 +76,8 @@ ctest --test-dir build-tests --output-on-failure
 ```
 
 The explicit compiler flags avoid ambiguity if `arm-none-eabi-gcc` or MSVC's `cl` are also on `PATH`. This machine's native toolchain is MSYS2 UCRT64 (`C:\msys64\ucrt64\bin`).
+
+The same commands also run inside the container from the Build section above (`docker run --rm -v ${PWD}:/workspace -w /workspace modular-midi-build bash -c "cmake -G Ninja -S tests -B build-tests-docker -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ && cmake --build build-tests-docker && ctest --test-dir build-tests-docker --output-on-failure"`) — verified to pass identically. Still supplementary; MSYS2 stays primary for now.
 
 Only code with no pico-sdk/FreeRTOS dependency belongs in `tests/` — e.g. `Button` is deliberately kept hardware-free (see Services below) so it can be tested this way; `ButtonService` and other FreeRTOS-task wrappers are not host-testable and aren't covered here.
 

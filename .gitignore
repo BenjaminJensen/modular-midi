@@ -1,6 +1,8 @@
 # Build artifacts
 build/
 build-tests/
+build-docker/
+build-tests-docker/
 bin/
 obj/
 *.elf
