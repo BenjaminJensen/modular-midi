@@ -1,0 +1,3 @@
+Checks: 'bugprone-*,modernize-*,performance-*,-modernize-use-trailing-return-type'
+HeaderFilterRegex: '.*/src/(shared|projects)/.*'
+WarningsAsErrors: ''

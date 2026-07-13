@@ -27,7 +27,29 @@ cmake --build build
 
 Output ELF for the current project: `build/src/projects/hub-master/hub_master.elf` (also produces `.uf2`, `.bin`, `.map` via `pico_add_extra_outputs`).
 
-There is no linter configured in this repo currently.
+## Linting
+
+[clang-tidy](https://clang.llvm.org/extra/clang-tidy/) (MSYS2 UCRT64 package `mingw-w64-ucrt-x86_64-clang-tools-extra`) is configured via `.clang-tidy` at the repo root, with a deliberately lean check set: `bugprone-*`, `modernize-*`, `performance-*` (minus `modernize-use-trailing-return-type`, a purely stylistic check). `cppcoreguidelines-*` is intentionally **not** enabled yet — it's too opinionated for the pre-refactor HAL code (see HAL section below), which is a known rewrite target anyway; revisit once that refactor lands. `HeaderFilterRegex` scopes diagnostics to `src/shared` and `src/projects`, excluding vendored `src/libs/*`. Existing findings have not been fixed repo-wide — this is tooling setup, not a cleanup pass.
+
+Both build trees generate `compile_commands.json` (`CMAKE_EXPORT_COMPILE_COMMANDS ON` is set in both `CMakeLists.txt` files), so which one to pass via `-p` depends on which build actually compiles the file in question:
+
+- **Host-testable code** (`tests/`, and anything it includes like `src/shared/button.h`) — build tree `build-tests`, no extra flags needed:
+  ```powershell
+  clang-tidy -p build-tests tests/shared/button_test.cpp
+  ```
+- **Firmware code** (anything under `src/projects` or `src/shared` that pulls in pico-sdk/FreeRTOS) — build tree `build`. clang-tidy parses with **clang's** frontend regardless of which compiler produced the compile command, and clang can't auto-detect the ARM GNU Toolchain's multilib header layout the way GCC can, so it needs explicit target/sysroot/include flags:
+  ```powershell
+  $toolchain = "C:/Program Files (x86)/Arm GNU Toolchain arm-none-eabi/14.3 rel1"
+  $sysroot = "$toolchain/arm-none-eabi"
+  $cxxInc = "$sysroot/include/c++/14.3.1"
+  $cxxTargetInc = "$cxxInc/arm-none-eabi/thumb/v8-m.main+fp/hard"  # Cortex-M33, hard float
+  clang-tidy -p build src/shared/hal/rp2350/display.cpp `
+    --extra-arg=--target=arm-none-eabi `
+    --extra-arg="--sysroot=$sysroot" `
+    --extra-arg="-isystem$cxxInc" `
+    --extra-arg="-isystem$cxxTargetInc"
+  ```
+  Without these, clang-tidy fails outright (`unknown target CPU 'armv8-m.main+fp+dsp'`, then `'cstdint' file not found`) rather than just misbehaving — if it errors like that, this is why.
 
 ## Testing
 
