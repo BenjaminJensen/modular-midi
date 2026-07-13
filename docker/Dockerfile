@@ -30,4 +30,9 @@ RUN curl -fsSL "$ARM_TOOLCHAIN_URL" -o /tmp/arm-toolchain.tar.xz \
 
 ENV PATH="/opt/arm-gnu-toolchain/bin:${PATH}"
 
+# The repo is bind-mounted, usually owned by a different UID than this
+# container's (root); git refuses to operate on such directories by default
+# ("detected dubious ownership") unless told it's safe.
+RUN git config --system --add safe.directory '*'
+
 WORKDIR /workspace

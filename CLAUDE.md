@@ -41,7 +41,7 @@ Builds the image if it doesn't exist yet, then runs the firmware build inside it
 
 ## Linting
 
-[clang-tidy](https://clang.llvm.org/extra/clang-tidy/) (MSYS2 UCRT64 package `mingw-w64-ucrt-x86_64-clang-tools-extra`) is configured via `.clang-tidy` at the repo root, with a deliberately lean check set: `bugprone-*`, `modernize-*`, `performance-*` (minus `modernize-use-trailing-return-type`, a purely stylistic check). `cppcoreguidelines-*` is intentionally **not** enabled yet — it's too opinionated for the pre-refactor HAL code (see HAL section below), which is a known rewrite target anyway; revisit once that refactor lands. `HeaderFilterRegex` scopes diagnostics to `src/shared` and `src/projects`, excluding vendored `src/libs/*`. Existing findings have not been fixed repo-wide — this is tooling setup, not a cleanup pass.
+[clang-tidy](https://clang.llvm.org/extra/clang-tidy/) (MSYS2 UCRT64 package `mingw-w64-ucrt-x86_64-clang-tools-extra`) is configured via `.clang-tidy` at the repo root, with a deliberately lean check set: `bugprone-*`, `modernize-*`, `performance-*` (minus `modernize-use-trailing-return-type`, a purely stylistic check). `cppcoreguidelines-*` is intentionally **not** enabled yet — it's too opinionated for the pre-refactor HAL code (see HAL section below), which is a known rewrite target anyway; revisit once that refactor lands. `HeaderFilterRegex` scopes diagnostics to `src/shared` and `src/projects`, excluding vendored `src/libs/*`. Existing findings have not been fixed repo-wide — this is tooling setup, not a cleanup pass. CI (see below) only lints the diff, not the whole repo, specifically so this doesn't have to change until the pre-refactor HAL code is actually touched.
 
 Both build trees generate `compile_commands.json` (`CMAKE_EXPORT_COMPILE_COMMANDS ON` is set in both `CMakeLists.txt` files), so which one to pass via `-p` depends on which build actually compiles the file in question:
 
@@ -97,6 +97,21 @@ ctest --test-dir build-tests --output-on-failure
 ```
 
 Hardware-coupled code (SPI/GPIO drivers, FreeRTOS task wrappers, anything under `src/shared/hal/rp2350` today) has no host-test harness yet, so TDD isn't yet mechanically enforceable there — verify those on target as usual. As more of the HAL moves to the concepts-based design in `architecture/HAL.md`, extend `tests/` coverage to match rather than leaving new hardware-independent logic untested.
+
+## Continuous Integration
+
+GitHub Actions (`.github/workflows/ci.yml`) runs on every PR into `main` and every push to `main`: firmware build, host tests, and diff-based clang-tidy, all inside the same `docker/Dockerfile` image used locally (see Build section above). A native Linux runner has no WSL2 boundary, so the local Docker slowdown noted there shouldn't apply here.
+
+- **Firmware build & host tests**: the same commands documented in Build/Testing above, just run via `docker run` against a fresh checkout instead of `build-docker.ps1`/manual invocation.
+- **Diff-based clang-tidy**: `tools/lint-diff.sh` runs [clang-tidy-diff.py](https://github.com/llvm/llvm-project/blob/main/clang-tools-extra/clang-tidy/tool/clang-tidy-diff.py) (ships with `clang-tools-extra`, already in the image) against only the lines actually changed relative to `origin/main` — not the whole repo. This is deliberate, not a shortcut: the pre-refactor HAL code (see Architecture below) already has a large volume of findings, so a repo-wide gate would force either a big upfront cleanup or a pile of `NOLINT` suppressions. New/changed code must be clean; untouched legacy code isn't retroactively flagged, and coverage grows organically as code actually gets touched.
+
+  ```
+  tools/lint-diff.sh [base-ref] [src-build-dir] [tests-build-dir]
+  ```
+
+  Defaults (`origin/main`, `build`, `build-tests`) match what CI configures fresh each run. For local testing without disturbing your own `build`/`build-tests`, pass different build-dir names (e.g. `build-docker`/`build-tests-docker`).
+
+**Not yet done**: GitHub branch protection requiring this workflow before merge / blocking direct pushes to `main` — still relying on the documented convention (see Git workflow above) until that's set up as a follow-up.
 
 ## Flash & debug
 

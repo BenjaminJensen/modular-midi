@@ -1,0 +1,7 @@
+# Shell scripts, Dockerfiles, and GitHub Actions workflows (which embed
+# shell scripts in their `run:` blocks) run inside Linux containers/CI -
+# they must keep LF line endings regardless of Windows' core.autocrlf, or
+# bash chokes on the embedded \r (e.g. "set: pipefail: invalid option name").
+*.sh text eol=lf
+Dockerfile text eol=lf
+*.yml text eol=lf

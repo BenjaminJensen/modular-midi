@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  build-test-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Ensure origin/main is available for diffing
+        run: git fetch origin main:refs/remotes/origin/main
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build CI image
+        uses: docker/build-push-action@v6
+        with:
+          context: docker
+          file: docker/Dockerfile
+          tags: modular-midi-ci:latest
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Firmware build
+        run: |
+          docker run --rm -v ${{ github.workspace }}:/workspace -w /workspace modular-midi-ci:latest \
+            bash -c "cmake -G Ninja -B build -DPICO_BOARD=pico2 -DPICO_NO_PICOTOOL=1 -DPICO_PLATFORM=rp2350 -DCMAKE_BUILD_TYPE=Debug && cmake --build build"
+
+      - name: Host tests
+        run: |
+          docker run --rm -v ${{ github.workspace }}:/workspace -w /workspace modular-midi-ci:latest \
+            bash -c "cmake -G Ninja -S tests -B build-tests -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ && cmake --build build-tests && ctest --test-dir build-tests --output-on-failure"
+
+      - name: Diff-based clang-tidy
+        run: |
+          docker run --rm -v ${{ github.workspace }}:/workspace -w /workspace modular-midi-ci:latest \
+            bash tools/lint-diff.sh origin/main
