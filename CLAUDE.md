@@ -27,7 +27,38 @@ cmake --build build
 
 Output ELF for the current project: `build/src/projects/hub-master/hub_master.elf` (also produces `.uf2`, `.bin`, `.map` via `pico_add_extra_outputs`).
 
-There is no test suite or linter configured in this repo currently.
+There is no linter configured in this repo currently.
+
+## Testing
+
+Hardware-independent logic (currently just `Button`) has host-side unit tests under `tests/`, built with a native compiler — **not** `arm-none-eabi-gcc` — since it's a separate CMake project from the firmware build (the root `CMakeLists.txt` unconditionally pulls in pico-sdk before `project()`, so it can't produce a host binary). Tests use [doctest](https://github.com/doctest/doctest), vendored as a single header at `src/libs/doctest/doctest.h` (pinned to v2.4.11, not a submodule).
+
+```powershell
+cmake -G "Ninja" -S tests -B build-tests -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++
+cmake --build build-tests
+ctest --test-dir build-tests --output-on-failure
+```
+
+The explicit compiler flags avoid ambiguity if `arm-none-eabi-gcc` or MSVC's `cl` are also on `PATH`. This machine's native toolchain is MSYS2 UCRT64 (`C:\msys64\ucrt64\bin`).
+
+Only code with no pico-sdk/FreeRTOS dependency belongs in `tests/` — e.g. `Button` is deliberately kept hardware-free (see Services below) so it can be tested this way; `ButtonService` and other FreeRTOS-task wrappers are not host-testable and aren't covered here.
+
+### TDD is required for hardware-independent logic
+
+For any code that can go through the host build above (no pico-sdk/FreeRTOS dependency — the `Button` category), development is test-first:
+
+1. Write a failing test in `tests/` for the behavior you're about to add or change.
+2. Implement (or edit) until it passes.
+3. Don't add untested logic to this category of code, and don't leave a red test in the tree.
+
+Before treating any change to testable code as done, rebuild and rerun the full suite — a change isn't finished if this fails, or if new/changed behavior in `tests/`-covered code has no corresponding test:
+
+```powershell
+cmake --build build-tests
+ctest --test-dir build-tests --output-on-failure
+```
+
+Hardware-coupled code (SPI/GPIO drivers, FreeRTOS task wrappers, anything under `src/shared/hal/rp2350` today) has no host-test harness yet, so TDD isn't yet mechanically enforceable there — verify those on target as usual. As more of the HAL moves to the concepts-based design in `architecture/HAL.md`, extend `tests/` coverage to match rather than leaving new hardware-independent logic untested.
 
 ## Flash & debug
 
@@ -74,7 +105,7 @@ The RP2350 is dual-core (via `pico_multicore`): `main()` starts the FreeRTOS sch
 
 ### Services
 
-Services under `src/shared/services/` wrap a HAL primitive in its own static FreeRTOS task. Example: `ButtonService` owns up to `MAX_BUTTONS` (4) `Button*` instances and polls them from a dedicated statically-allocated task (`start(priority)` → `xTaskCreateStatic`-backed `run()` loop calling `Button::update(delta_time)` on each). `Button` itself is HAL-agnostic — it takes an `IPin*` and handles debounce (4-sample shift register), long-press, and double-tap detection in software.
+Services under `src/shared/services/` wrap a HAL primitive in its own static FreeRTOS task. Example: `ButtonService` owns up to `MAX_BUTTONS` (4) `Button*` instances and polls them from a dedicated statically-allocated task (`start(priority)` → `xTaskCreateStatic`-backed `run()` loop calling `Button::update(delta_time)` on each). `Button` itself is HAL-agnostic — it takes an `IPin*` and handles debounce (4-sample shift register), long-press, and double-tap detection in software, exposing the result via `is_pressed()`/`was_long_pressed()`/`was_double_tapped()`. It deliberately has no logging or other pico-sdk dependency so it stays host-testable (see Testing above) — don't reintroduce a hardware-coupled include like the old `async_logger.h`/`LOG_DEBUG` without giving it a host-safe seam.
 
 ### Display
 
