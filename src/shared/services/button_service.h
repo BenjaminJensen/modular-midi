@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include "shared/button.h"
 #include "shared/hal/pin_concept.h"
 #include "FreeRTOS.h"
@@ -53,6 +54,6 @@ private:
     StaticTask_t xTaskBuffer;
 
     static const uint8_t MAX_BUTTONS = 4;
-    Button<PinT>* m_buttons[MAX_BUTTONS];
+    std::array<Button<PinT>*, MAX_BUTTONS> m_buttons;
     uint8_t m_button_count = 0;
 };
