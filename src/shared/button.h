@@ -86,7 +86,7 @@ private:
     uint8_t m_id;
     PinT* m_pin;
     Logger<SinkT>* m_logger;
-    uint8_t m_state;
+    uint8_t m_state = 0;
     bool m_is_pressed = false;
     uint16_t m_hold_timer = 0;
     bool m_long_press_triggered = false;
