@@ -2,13 +2,16 @@
 #pragma once
 
 #include <cstdint>
+#include "hal/log_sink_concept.h"
 #include "hal/pin_concept.h"
+#include "logger.h"
 #include "services/button_payload.h"
 
-template<GpioPin PinT>
+template<GpioPin PinT, LogSink SinkT>
 class Button {
 public:
-    Button(PinT* pin, uint16_t long_press_ms = 1000) : m_pin(pin), m_long_press_ms(long_press_ms) {}
+    Button(uint8_t id, PinT* pin, Logger<SinkT>& logger, uint16_t long_press_ms = 1000)
+        : m_id(id), m_pin(pin), m_logger(&logger), m_long_press_ms(long_press_ms) {}
 
     /*
         The update function takes a deltatiome in milliseconds since the last call.
@@ -35,10 +38,12 @@ public:
             m_hold_timer = 0;
             m_long_press_triggered = false;
             m_double_tap_triggered = false;
+            m_logger->debug() << "Button " << m_id << " pressed";
         }
         else if ((m_state & 0x0F) == 0x00 && m_is_pressed) {
             // 0xF0 means 4 consecutive "released" readings
             m_is_pressed = false;
+            m_logger->debug() << "Button " << m_id << " released";
 
             if (!m_long_press_triggered) {
                 m_tap_count++;
@@ -52,6 +57,7 @@ public:
             if (m_hold_timer >= m_long_press_ms) {
                 m_long_press_triggered = true;
                 m_tap_count = 0; // Cancel double tap if it was a long press
+                m_logger->debug() << "Button " << m_id << " long press";
             }
         }
 
@@ -62,6 +68,7 @@ public:
             if (m_tap_count >= 2) {
                 m_double_tap_triggered = true;
                 m_tap_count = 0;
+                m_logger->debug() << "Button " << m_id << " double tap";
             }
             else if (m_gap_timer >= m_long_press_ms) {
                 // If the gap expires and we only have 1 tap, it was just a single tap
@@ -76,7 +83,9 @@ public:
     bool was_double_tapped() const { return m_double_tap_triggered; }
 
 private:
+    uint8_t m_id;
     PinT* m_pin;
+    Logger<SinkT>* m_logger;
     uint8_t m_state;
     bool m_is_pressed = false;
     uint16_t m_hold_timer = 0;

@@ -1,6 +1,5 @@
 #include "st7789.h"
 #include "pico/stdlib.h"
-#include "async_logger.h"
 
 // A static pointer to the ST7789 instance for the ISR.
 // This allows the static ISR to call the instance-specific handler.
@@ -279,7 +278,6 @@ void ST7789::set_window(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2) {
     spi_set_format(spi, 16, SPI_CPOL_1, SPI_CPHA_1, SPI_MSB_FIRST);
 
     //send_data(y_data, 2);
-    //LOG_DEBUG("Set window: (%d, %d) to (%d, %d)\n", x1_adjusted, y1_adjusted, x2_adjusted, y2_adjusted);
 }
 /*
 void ST7789::set_window(int32_t x1, int32_t y1, int32_t x2, int32_t y2) {

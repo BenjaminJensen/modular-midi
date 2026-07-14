@@ -4,7 +4,8 @@ set(RTT_PATH "${CMAKE_SOURCE_DIR}/src/libs/RTT/RTT")
 
 target_sources(shared PRIVATE
     st7789.cpp
-    async_logger.cpp
+    rtt_sink.cpp
+    logger_instance.cpp
     display.cpp
     ${RTT_PATH}/SEGGER_RTT.c        # Much cleaner
     ${RTT_PATH}/SEGGER_RTT_printf.c

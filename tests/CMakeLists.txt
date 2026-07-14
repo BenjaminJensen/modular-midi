@@ -26,3 +26,16 @@ target_include_directories(button_tests PRIVATE
 )
 
 add_test(NAME button_tests COMMAND button_tests)
+
+add_executable(logger_tests
+    shared/logger_test.cpp
+)
+
+target_include_directories(logger_tests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/shared
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/libs/doctest
+    ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+add_test(NAME logger_tests COMMAND logger_tests)
