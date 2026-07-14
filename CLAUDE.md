@@ -70,12 +70,16 @@ The same two flavors of command also run inside the container from the Build sec
 Hardware-independent logic (currently just `Button`) has host-side unit tests under `tests/`, built with a native compiler — **not** `arm-none-eabi-gcc` — since it's a separate CMake project from the firmware build (the root `CMakeLists.txt` unconditionally pulls in pico-sdk before `project()`, so it can't produce a host binary). Tests use [doctest](https://github.com/doctest/doctest), vendored as a single header at `src/libs/doctest/doctest.h` (pinned to v2.4.11, not a submodule).
 
 ```powershell
+./test.ps1
+```
+
+Puts MSYS2 UCRT64 (`C:\msys64\ucrt64\bin`) first on `PATH` — required, since without it `arm-none-eabi-gcc` or MSVC's `cl` (also on `PATH` on this machine) can get picked up by CMake instead of a native compiler, and the failure mode is a confusing runtime error (e.g. `ctest` failing with a missing-DLL exit code), not a clear build error — then configures into `build-tests/`, builds, and runs the suite. Equivalent manual invocation from repo root once MSYS2 is already first on `PATH`:
+
+```powershell
 cmake -G "Ninja" -S tests -B build-tests -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++
 cmake --build build-tests
 ctest --test-dir build-tests --output-on-failure
 ```
-
-The explicit compiler flags avoid ambiguity if `arm-none-eabi-gcc` or MSVC's `cl` are also on `PATH`. This machine's native toolchain is MSYS2 UCRT64 (`C:\msys64\ucrt64\bin`).
 
 The same commands also run inside the container from the Build section above (`docker run --rm -v ${PWD}:/workspace -w /workspace modular-midi-build bash -c "cmake -G Ninja -S tests -B build-tests-docker -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ && cmake --build build-tests-docker && ctest --test-dir build-tests-docker --output-on-failure"`) — verified to pass identically. Still supplementary; MSYS2 stays primary for now.
 
@@ -89,12 +93,7 @@ For any code that can go through the host build above (no pico-sdk/FreeRTOS depe
 2. Implement (or edit) until it passes.
 3. Don't add untested logic to this category of code, and don't leave a red test in the tree.
 
-Before treating any change to testable code as done, rebuild and rerun the full suite — a change isn't finished if this fails, or if new/changed behavior in `tests/`-covered code has no corresponding test:
-
-```powershell
-cmake --build build-tests
-ctest --test-dir build-tests --output-on-failure
-```
+Before treating any change to testable code as done, rebuild and rerun the full suite (`./test.ps1`, or `cmake --build build-tests && ctest --test-dir build-tests --output-on-failure` if `build-tests/` is already configured) — a change isn't finished if this fails, or if new/changed behavior in `tests/`-covered code has no corresponding test.
 
 Hardware-coupled code (SPI/GPIO drivers, FreeRTOS task wrappers, anything under `src/shared/hal/rp2350` today) has no host-test harness yet, so TDD isn't yet mechanically enforceable there — verify those on target as usual. As more of the HAL moves to the concepts-based design in `architecture/HAL.md`, extend `tests/` coverage to match rather than leaving new hardware-independent logic untested.
 
@@ -105,11 +104,21 @@ GitHub Actions (`.github/workflows/ci.yml`) runs on every PR into `main` and eve
 - **Firmware build & host tests**: the same commands documented in Build/Testing above, just run via `docker run` against a fresh checkout instead of `build-docker.ps1`/manual invocation.
 - **Diff-based clang-tidy**: `tools/lint-diff.sh` runs [clang-tidy-diff.py](https://github.com/llvm/llvm-project/blob/main/clang-tools-extra/clang-tidy/tool/clang-tidy-diff.py) (ships with `clang-tools-extra`, already in the image) against only the lines actually changed relative to `origin/main` — not the whole repo. This is deliberate, not a shortcut: the pre-refactor HAL code (see Architecture below) already has a large volume of findings, so a repo-wide gate would force either a big upfront cleanup or a pile of `NOLINT` suppressions. New/changed code must be clean; untouched legacy code isn't retroactively flagged, and coverage grows organically as code actually gets touched.
 
+  ```powershell
+  ./lint.ps1
+  ```
+
+  Runs the exact CI sequence locally, against the current branch's commits: builds the `modular-midi-build` image if it doesn't exist yet, fetches `origin/main`, configures+builds `build-docker/`+`build-tests-docker/` (never touches your native `build/`/`build-tests/`), then runs `tools/lint-diff.sh origin/main build-docker build-tests-docker` inside the container.
+
+  **Must be run from a real PowerShell shell, not Git Bash** — Git Bash's path translation mangles the `-v "${PWD}:/workspace"` mount spec into something like `C:/Program Files/Git/workspace`, so `docker run` fails outright rather than just misbehaving. Requires Docker Desktop running, and requires at least one commit on the current branch: `tools/lint-diff.sh` diffs `origin/main...HEAD`, so with nothing committed yet that diff is empty and every file silently reports "No relevant changes found" — which reads as "clean" but actually means "nothing was checked."
+
+  The underlying script, if you need to point it at something other than the defaults:
+
   ```
   tools/lint-diff.sh [base-ref] [src-build-dir] [tests-build-dir]
   ```
 
-  Defaults (`origin/main`, `build`, `build-tests`) match what CI configures fresh each run. For local testing without disturbing your own `build`/`build-tests`, pass different build-dir names (e.g. `build-docker`/`build-tests-docker`).
+  Defaults (`origin/main`, `build`, `build-tests`) match what CI configures fresh each run; `lint.ps1` passes `build-docker`/`build-tests-docker` explicitly so it never collides with your native trees.
 
 **Branch protection is enabled on `main`**: the `build-test-lint` check must pass, a PR is required (direct pushes are rejected, `enforce_admins` is on so this applies to the repo owner too — verified by attempting a direct push and confirming GitHub rejects it), and linear history is required (GitHub's plain "Merge commit" button is disabled; use "Squash and merge" or "Rebase and merge"). This is what actually enforces the Git workflow rule above, not just convention.
 
@@ -123,7 +132,7 @@ Flashing and debugging are done through SEGGER tools, not VS Code's built-in deb
 
 ## Coding standard
 
-Target modern C++, C++20 and onwards (concepts, `constexpr`/`consteval`, structured bindings, ranges where applicable) rather than older C-with-classes style.
+Target modern C++, C++20 and onwards (concepts, `constexpr`/`consteval`, structured bindings, ranges where applicable) rather than older C-with-classes style. Enforced by `set(CMAKE_CXX_STANDARD 20)` in the root `CMakeLists.txt` (applies to `shared` and every `src/projects/<name>` target; the vendored `FreeRTOS-Kernel` submodule pins its own C++17 independently in its own `CMakeLists.txt`, so it's unaffected).
 
 ## Architecture
 
@@ -144,7 +153,7 @@ Multi-platform selection for the HAL is intended to happen at the `src/shared/ha
 
 `architecture/HAL.md` documents the **intended** HAL architecture: zero-overhead (no virtual functions/vtables — static dispatch via C++20 concepts and templates), zero dynamic allocation, with peripheral identity (pin numbers, SPI instance) passed as runtime constructor parameters so there's one class per peripheral type rather than one per instance.
 
-The current code in `src/shared/hal/rp2350/`, `src/shared/i_pin.h`, and `src/shared/button.h` predates that design and uses classic runtime polymorphism instead (`IPin` is an abstract base class with a `virtual bool read()`, implemented by `Pin`). It compiles and runs correctly on target — pico-sdk, FreeRTOS, and lvgl are all in a working integrated configuration — but is a refactor target, not a reference implementation to copy from. When adding new HAL code, follow `architecture/HAL.md`'s concepts-based pattern rather than mirroring `IPin`/`Pin`.
+`src/shared/hal/pin_concept.h` (`GpioPin`), `src/shared/hal/rp2350/pin.h` (`Pin`), and `src/shared/button.h`/`src/shared/services/button_service.h` (`Button<PinT>`/`ButtonService<PinT>`) now follow that design. The rest of `src/shared/hal/rp2350/` (`display.h/.cpp`, `st7789.h/.cpp`, `async_logger.h/.cpp`) still predates it and uses classic runtime polymorphism / non-templated classes. It compiles and runs correctly on target — pico-sdk, FreeRTOS, and lvgl are all in a working integrated configuration — but is a refactor target, not a reference implementation to copy from. When adding new HAL code, follow `architecture/HAL.md`'s concepts-based pattern — `pin_concept.h`/`Pin`/`Button` is a working example of it — rather than mirroring the display/logger code.
 
 ### Concurrency model
 
@@ -158,7 +167,7 @@ The RP2350 is dual-core (via `pico_multicore`): `main()` starts the FreeRTOS sch
 
 ### Services
 
-Services under `src/shared/services/` wrap a HAL primitive in its own static FreeRTOS task. Example: `ButtonService` owns up to `MAX_BUTTONS` (4) `Button*` instances and polls them from a dedicated statically-allocated task (`start(priority)` → `xTaskCreateStatic`-backed `run()` loop calling `Button::update(delta_time)` on each). `Button` itself is HAL-agnostic — it takes an `IPin*` and handles debounce (4-sample shift register), long-press, and double-tap detection in software, exposing the result via `is_pressed()`/`was_long_pressed()`/`was_double_tapped()`. It deliberately has no logging or other pico-sdk dependency so it stays host-testable (see Testing above) — don't reintroduce a hardware-coupled include like the old `async_logger.h`/`LOG_DEBUG` without giving it a host-safe seam.
+Services under `src/shared/services/` wrap a HAL primitive in its own static FreeRTOS task. Example: `ButtonService<PinT>` — templated on the pin type it manages, constrained by the `GpioPin` concept (see HAL section above) — owns up to `MAX_BUTTONS` (4) `Button<PinT>*` instances and polls them from a dedicated statically-allocated task (`start(priority)` → `xTaskCreateStatic`-backed `run()` loop calling `Button::update(delta_time)` on each). `Button` itself is HAL-agnostic — it's templated on any type satisfying `GpioPin` and handles debounce (4-sample shift register), long-press, and double-tap detection in software, exposing the result via `is_pressed()`/`was_long_pressed()`/`was_double_tapped()`. It deliberately has no logging or other pico-sdk dependency so it stays host-testable (see Testing above) — don't reintroduce a hardware-coupled include like the old `async_logger.h`/`LOG_DEBUG` without giving it a host-safe seam.
 
 ### Display
 
