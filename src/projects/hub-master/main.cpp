@@ -3,17 +3,17 @@
 #include "FreeRTOS.h"
 #include "task.h"
 #include <cstdio>
-#include "async_logger.h"
+#include "logger_instance.h"
 #include "display.h"
 #include "shared/services/button_service.h"
 #include "shared/hal/rp2350/pin.h"
 // Statically instantiate the display using the default pins defined in the header
 
 static Display display;
-static ButtonService<Pin> button_service;
+static ButtonService<Pin, RttSink> button_service;
 
 static Pin button_pin(28); // Example pin number
-static Button<Pin> button(&button_pin, 500); // 500ms long press threshold
+static Button<Pin, RttSink> button(0, &button_pin, g_log, 500); // 500ms long press threshold
 
 void blink_task(void *pvParameters) {
     const uint LED_PIN = 0;
@@ -21,7 +21,7 @@ void blink_task(void *pvParameters) {
     gpio_set_dir(LED_PIN, GPIO_OUT);
 
     for(;;) {
-        Logger::log("Blink task\n");
+        g_log.debug() << "Blink task";
         // printf("Blinking LED\n");
         gpio_put(LED_PIN, 1);
         vTaskDelay(pdMS_TO_TICKS(500));
@@ -69,15 +69,15 @@ int main() {
 
     // stdio_init_all();
     
-    // Initialize the RTT Logger 
+    // Initialize the RTT Logger
     // (This safely configures RTT channels 1 and 2 for Core 0 and Core 1)
-    Logger::init();
+    g_log_sink.init();
 
     // Now you can log freely!
-    
-    Logger::log("System starting up...\n");
-    Logger::log("Running on Core: %d\n", get_core_num());
-    Logger::log("String test: %s\n", "Hello World!");
+
+    g_log.debug() << "System starting up...";
+    g_log.debug() << "Running on Core: " << get_core_num();
+    g_log.debug() << "String test: " << "Hello World!";
     
     // Create the task and pin it strictly to Core 0
     blink_task_handle = xTaskCreateStatic(

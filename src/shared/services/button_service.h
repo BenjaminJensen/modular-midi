@@ -2,16 +2,17 @@
 
 #include <array>
 #include "shared/button.h"
+#include "shared/hal/log_sink_concept.h"
 #include "shared/hal/pin_concept.h"
 #include "FreeRTOS.h"
 #include "task.h"
 
-template<GpioPin PinT>
+template<GpioPin PinT, LogSink SinkT>
 class ButtonService {
 public:
     ButtonService() {};
 
-    void add_button(Button<PinT>* button) {
+    void add_button(Button<PinT, SinkT>* button) {
         if (m_button_count < MAX_BUTTONS) {
             m_buttons[m_button_count++] = button;
         }
@@ -54,6 +55,6 @@ private:
     StaticTask_t xTaskBuffer;
 
     static const uint8_t MAX_BUTTONS = 4;
-    std::array<Button<PinT>*, MAX_BUTTONS> m_buttons;
+    std::array<Button<PinT, SinkT>*, MAX_BUTTONS> m_buttons;
     uint8_t m_button_count = 0;
 };
