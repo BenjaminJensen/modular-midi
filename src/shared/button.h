@@ -2,12 +2,13 @@
 #pragma once
 
 #include <cstdint>
-#include "i_pin.h"
+#include "hal/pin_concept.h"
 #include "services/button_payload.h"
 
+template<GpioPin PinT>
 class Button {
 public:
-    Button(IPin* pin, uint16_t long_press_ms = 1000) : m_pin(pin), m_long_press_ms(long_press_ms) {}
+    Button(PinT* pin, uint16_t long_press_ms = 1000) : m_pin(pin), m_long_press_ms(long_press_ms) {}
 
     /*
         The update function takes a deltatiome in milliseconds since the last call.
@@ -75,7 +76,7 @@ public:
     bool was_double_tapped() const { return m_double_tap_triggered; }
 
 private:
-    IPin* m_pin;
+    PinT* m_pin;
     uint8_t m_state;
     bool m_is_pressed = false;
     uint16_t m_hold_timer = 0;
