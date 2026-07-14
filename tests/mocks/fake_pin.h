@@ -1,10 +1,8 @@
 #pragma once
 
-#include "i_pin.h"
-
-class FakePin : public IPin {
+class FakePin {
 public:
     bool reading = false;
 
-    bool read() override { return reading; }
+    bool read() { return reading; }
 };

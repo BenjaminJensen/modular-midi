@@ -10,10 +10,10 @@
 // Statically instantiate the display using the default pins defined in the header
 
 static Display display;
-static ButtonService button_service;
+static ButtonService<Pin> button_service;
 
 static Pin button_pin(28); // Example pin number
-static Button button(&button_pin, 500); // 500ms long press threshold
+static Button<Pin> button(&button_pin, 500); // 500ms long press threshold
 
 void blink_task(void *pvParameters) {
     const uint LED_PIN = 0;

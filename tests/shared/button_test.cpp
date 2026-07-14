@@ -11,14 +11,14 @@ namespace {
     constexpr uint16_t LONG_PRESS_MS = 200;
     constexpr uint8_t TICK_MS = 10;
 
-    void press_debounced(Button& button, FakePin& pin) {
+    void press_debounced(Button<FakePin>& button, FakePin& pin) {
         pin.reading = false; // active-low: pressed
         for (int i = 0; i < 4; ++i) {
             button.update(TICK_MS);
         }
     }
 
-    void release_debounced(Button& button, FakePin& pin) {
+    void release_debounced(Button<FakePin>& button, FakePin& pin) {
         pin.reading = true; // active-low: released
         for (int i = 0; i < 4; ++i) {
             button.update(TICK_MS);
