@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Git workflow
 
-**Never commit directly to `main`.** All work happens on a topic branch; `main` is only updated via fast-forward merge or PR. Before committing, confirm the current branch is not `main`.
+**Never commit directly to `main`.** All work happens on a topic branch. This is enforced by GitHub branch protection (see Continuous Integration below), not just convention: `main` only accepts changes via a PR with the `build-test-lint` check passing, and direct pushes are rejected even for the repo owner. Merge via GitHub's "Squash and merge" or "Rebase and merge" (plain merge commits are disabled — linear history is required); a bare local `git merge --ff-only && git push` to `main` no longer works, since any direct push to the protected branch is rejected regardless of whether it's a fast-forward. Before committing, confirm the current branch is not `main`.
 
 ## Build
 
@@ -111,7 +111,7 @@ GitHub Actions (`.github/workflows/ci.yml`) runs on every PR into `main` and eve
 
   Defaults (`origin/main`, `build`, `build-tests`) match what CI configures fresh each run. For local testing without disturbing your own `build`/`build-tests`, pass different build-dir names (e.g. `build-docker`/`build-tests-docker`).
 
-**Not yet done**: GitHub branch protection requiring this workflow before merge / blocking direct pushes to `main` — still relying on the documented convention (see Git workflow above) until that's set up as a follow-up.
+**Branch protection is enabled on `main`**: the `build-test-lint` check must pass, a PR is required (direct pushes are rejected, `enforce_admins` is on so this applies to the repo owner too — verified by attempting a direct push and confirming GitHub rejects it), and linear history is required (GitHub's plain "Merge commit" button is disabled; use "Squash and merge" or "Rebase and merge"). This is what actually enforces the Git workflow rule above, not just convention.
 
 ## Flash & debug
 
