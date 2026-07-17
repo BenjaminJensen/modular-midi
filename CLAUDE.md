@@ -47,7 +47,7 @@ Builds the image if it doesn't exist yet, then runs the firmware build inside it
 
 Both build trees generate `compile_commands.json` (`CMAKE_EXPORT_COMPILE_COMMANDS ON` is set in both `CMakeLists.txt` files), so which one to pass via `-p` depends on which build actually compiles the file in question:
 
-- **Host-testable code** (`tests/`, and anything it includes like `src/shared/button.h`) — build tree `build-tests`, no extra flags needed:
+- **Host-testable code** (`tests/`, and anything it includes like `src/shared/button.h`/`src/shared/services/button_service.h`) — build tree `build-tests`, no extra flags needed:
   ```powershell
   clang-tidy -p build-tests tests/shared/button_test.cpp
   ```
@@ -85,11 +85,11 @@ ctest --test-dir build-tests --output-on-failure
 
 The same commands also run inside the container from the Build section above (`docker run --rm -v ${PWD}:/workspace -w /workspace modular-midi-build bash -c "cmake -G Ninja -S tests -B build-tests-docker -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ && cmake --build build-tests-docker && ctest --test-dir build-tests-docker --output-on-failure"`) — verified to pass identically. Still supplementary; MSYS2 stays primary for now.
 
-Only code with no pico-sdk/FreeRTOS dependency belongs in `tests/` — e.g. `Button` is deliberately kept hardware-free (see Services below) so it can be tested this way; `ButtonService` and other FreeRTOS-task wrappers are not host-testable and aren't covered here.
+Only code with no pico-sdk/FreeRTOS dependency belongs in `tests/` — e.g. `Button` is deliberately kept hardware-free (see Services below) so it can be tested this way. `ButtonService` now qualifies too: it depends on FreeRTOS only through the injected `TaskRunner` concept (see `architecture/SERVICES.md`), so a host build satisfies that concept with a fake (`tests/mocks/fake_task_runner.h`) instead of the real RTOS. The concrete rp2350 implementations of these concepts — `Pin`, `FreeRTOSTaskRunner`, `RttSink` — still touch pico-sdk/FreeRTOS directly and are not host-testable; only the logic layered on top of them is.
 
 ### TDD is required for hardware-independent logic
 
-For any code that can go through the host build above (no pico-sdk/FreeRTOS dependency — the `Button` category), development is test-first:
+For any code that can go through the host build above (no pico-sdk/FreeRTOS dependency — the `Button`/`ButtonService` category), development is test-first:
 
 1. Write a failing test in `tests/` for the behavior you're about to add or change.
 2. Implement (or edit) until it passes.
@@ -97,7 +97,7 @@ For any code that can go through the host build above (no pico-sdk/FreeRTOS depe
 
 Before treating any change to testable code as done, rebuild and rerun the full suite (`./test.ps1`, or `cmake --build build-tests && ctest --test-dir build-tests --output-on-failure` if `build-tests/` is already configured) — a change isn't finished if this fails, or if new/changed behavior in `tests/`-covered code has no corresponding test.
 
-Hardware-coupled code (SPI/GPIO drivers, FreeRTOS task wrappers, anything under `src/shared/hal/rp2350` today) has no host-test harness yet, so TDD isn't yet mechanically enforceable there — verify those on target as usual. As more of the HAL moves to the concepts-based design in `architecture/HAL.md`, extend `tests/` coverage to match rather than leaving new hardware-independent logic untested.
+Hardware-coupled code — the concrete concept implementations themselves (`Pin`, `FreeRTOSTaskRunner`, SPI/GPIO drivers, everything under `src/shared/hal/rp2350` today) — has no host-test harness, so TDD isn't mechanically enforceable there; verify those on target as usual. As more of the HAL and Services layer moves to the concepts-based design in `architecture/HAL.md`/`architecture/SERVICES.md`, extend `tests/` coverage to match rather than leaving new hardware-independent logic untested.
 
 ## Continuous Integration
 
@@ -155,7 +155,7 @@ Multi-platform selection for the HAL is intended to happen at the `src/shared/ha
 
 `architecture/HAL.md` documents the **intended** HAL architecture: zero-overhead (no virtual functions/vtables — static dispatch via C++20 concepts and templates), zero dynamic allocation, with peripheral identity (pin numbers, SPI instance) passed as runtime constructor parameters so there's one class per peripheral type rather than one per instance.
 
-`src/shared/hal/pin_concept.h` (`GpioPin`), `src/shared/hal/rp2350/pin.h` (`Pin`), and `src/shared/button.h`/`src/shared/services/button_service.h` (`Button<PinT>`/`ButtonService<PinT>`) now follow that design. The rest of `src/shared/hal/rp2350/` (`display.h/.cpp`, `st7789.h/.cpp`, `async_logger.h/.cpp`) still predates it and uses classic runtime polymorphism / non-templated classes. It compiles and runs correctly on target — pico-sdk, FreeRTOS, and lvgl are all in a working integrated configuration — but is a refactor target, not a reference implementation to copy from. When adding new HAL code, follow `architecture/HAL.md`'s concepts-based pattern — `pin_concept.h`/`Pin`/`Button` is a working example of it — rather than mirroring the display/logger code.
+`src/shared/hal/pin_concept.h` (`GpioPin`), `src/shared/hal/rp2350/pin.h` (`Pin`), `src/shared/hal/task_runner_concept.h` (`TaskRunner` — a scheduling/execution-context concept rather than a peripheral one; see `architecture/SERVICES.md`), and `src/shared/button.h`/`src/shared/services/button_service.h` (`Button<PinT, SinkT>`/`ButtonService<PinT, SinkT, RunnerT>`) now follow that design. The rest of `src/shared/hal/rp2350/` (`display.h/.cpp`, `st7789.h/.cpp`, `async_logger.h/.cpp`) still predates it and uses classic runtime polymorphism / non-templated classes. It compiles and runs correctly on target — pico-sdk, FreeRTOS, and lvgl are all in a working integrated configuration — but is a refactor target, not a reference implementation to copy from. When adding new HAL code, follow `architecture/HAL.md`'s concepts-based pattern — `pin_concept.h`/`Pin`/`Button` is a working example of it — rather than mirroring the display/logger code.
 
 ### Concurrency model
 
@@ -169,7 +169,7 @@ The RP2350 is dual-core (via `pico_multicore`): `main()` starts the FreeRTOS sch
 
 ### Services
 
-Services under `src/shared/services/` wrap a HAL primitive in its own static FreeRTOS task. Example: `ButtonService<PinT>` — templated on the pin type it manages, constrained by the `GpioPin` concept (see HAL section above) — owns up to `MAX_BUTTONS` (4) `Button<PinT>*` instances and polls them from a dedicated statically-allocated task (`start(priority)` → `xTaskCreateStatic`-backed `run()` loop calling `Button::update(delta_time)` on each). `Button` itself is HAL-agnostic — it's templated on any type satisfying `GpioPin` and handles debounce (4-sample shift register), long-press, and double-tap detection in software, exposing the result via `is_pressed()`/`was_long_pressed()`/`was_double_tapped()`. It deliberately has no logging or other pico-sdk dependency so it stays host-testable (see Testing above) — don't reintroduce a hardware-coupled include like the old `async_logger.h`/`LOG_DEBUG` without giving it a host-safe seam.
+`architecture/SERVICES.md` documents the Services architecture: a Service wraps a hardware-independent unit of logic in its own execution context, injected via a `TaskRunner` concept (mirroring HAL.md's DIP approach for peripherals) rather than depending on FreeRTOS directly — which is also what makes it possible to give a Service a host-side test wrapper under `tests/` for real doctest + clang-tidy coverage. `ButtonService<PinT, SinkT, RunnerT>` is the reference implementation: templated on the pin type (`GpioPin`), log sink type (`LogSink`), and execution context (`TaskRunner`), it owns up to `MAX_BUTTONS` (4) `Button<PinT, SinkT>*` instances and polls them from a dedicated statically-allocated task (`start()` → the injected `RunnerT`'s `run()` loop calling `Button::update(delta_time)` on each). `Button` itself is HAL-agnostic — it's templated on any type satisfying `GpioPin` and handles debounce (4-sample shift register), long-press, and double-tap detection in software, exposing the result via `is_pressed()`/`was_long_pressed()`/`was_double_tapped()`. It deliberately has no logging or other pico-sdk dependency so it stays host-testable (see Testing above) — don't reintroduce a hardware-coupled include like the old `async_logger.h`/`LOG_DEBUG` without giving it a host-safe seam.
 
 ### Display
 

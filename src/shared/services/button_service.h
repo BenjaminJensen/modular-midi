@@ -1,16 +1,16 @@
 #pragma once
 
 #include <array>
+#include <cstdint>
 #include "shared/button.h"
 #include "shared/hal/log_sink_concept.h"
 #include "shared/hal/pin_concept.h"
-#include "FreeRTOS.h"
-#include "task.h"
+#include "shared/hal/task_runner_concept.h"
 
-template<GpioPin PinT, LogSink SinkT>
+template<GpioPin PinT, LogSink SinkT, TaskRunner RunnerT>
 class ButtonService {
 public:
-    ButtonService() {};
+    explicit ButtonService(RunnerT& runner) : m_runner(runner) {}
 
     void add_button(Button<PinT, SinkT>* button) {
         if (m_button_count < MAX_BUTTONS) {
@@ -24,16 +24,8 @@ public:
         }
     }
 
-    void start(UBaseType_t priority) {
-        xTaskCreateStatic(
-            task_entry,          // Task entry function
-            "ButtonService",     // Name of the task (for debugging)
-            stack_size,         // Stack size in words
-            this,               // Parameter to pass to the task (pointer to this instance)
-            priority,           // Task priority
-            xStack,            // Stack buffer (not needed for dynamic allocation)
-            &xTaskBuffer             // Task control block (not needed for dynamic allocation)
-        );
+    void start() {
+        m_runner.start(&task_entry, this);
     }
 
 private:
@@ -43,18 +35,16 @@ private:
     }
 
     void run() {
-        const uint8_t UPDATE_INTERVAL_MS = 10;
-        for(;;) {
+        for (;;) {
             update(UPDATE_INTERVAL_MS);
-            vTaskDelay(pdMS_TO_TICKS(UPDATE_INTERVAL_MS));
+            m_runner.delay_ms(UPDATE_INTERVAL_MS);
         }
     }
 
-    const static uint16_t stack_size = 512;
-    StackType_t xStack[stack_size];
-    StaticTask_t xTaskBuffer;
+    static constexpr uint8_t UPDATE_INTERVAL_MS = 10;
+    static constexpr uint8_t MAX_BUTTONS = 4;
 
-    static const uint8_t MAX_BUTTONS = 4;
-    std::array<Button<PinT, SinkT>*, MAX_BUTTONS> m_buttons;
+    RunnerT& m_runner;
+    std::array<Button<PinT, SinkT>*, MAX_BUTTONS> m_buttons{};
     uint8_t m_button_count = 0;
 };

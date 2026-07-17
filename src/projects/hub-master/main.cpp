@@ -7,10 +7,12 @@
 #include "display.h"
 #include "shared/services/button_service.h"
 #include "shared/hal/rp2350/pin.h"
+#include "shared/hal/rp2350/freertos_task_runner.h"
 // Statically instantiate the display using the default pins defined in the header
 
 static Display display;
-static ButtonService<Pin, RttSink> button_service;
+static FreeRTOSTaskRunner<512> button_runner("ButtonService", 1);
+static ButtonService<Pin, RttSink, FreeRTOSTaskRunner<512>> button_service(button_runner);
 
 static Pin button_pin(28); // Example pin number
 static Button<Pin, RttSink> button(0, &button_pin, g_log, 500); // 500ms long press threshold
@@ -63,7 +65,7 @@ StackType_t xStack[configMINIMAL_STACK_SIZE];
 int main() {
 
     button_service.add_button(&button);
-    button_service.start(1);
+    button_service.start();
 
     // This now wakes up the RTT driver instead of USB/UART
 
