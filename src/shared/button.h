@@ -8,34 +8,29 @@
 
 // What happened during a single update() call - a bitmask, since a double tap
 // resolves on the same tick as the release edge that completes it (both bits
-// set in one return value). FLAG_ENUM_ATTR tells clang's static analyzer that
-// OR'd-together combinations are valid values, not just the named ones -
-// without it, clang-analyzer-optin.core.EnumCastOutOfRange flags every
-// operator| result that isn't a single named enumerator. clang-tidy always
-// parses with clang's frontend regardless of which compiler builds this file
-// (see CLAUDE.md's Linting section), so gating on __clang__ still reaches it
-// there while keeping it out of GCC's firmware/host builds, which don't
-// recognize the attribute and would otherwise just warn on it.
-#if defined(__clang__)
-#define FLAG_ENUM_ATTR [[clang::flag_enum]]
-#else
-#define FLAG_ENUM_ATTR
-#endif
-enum class FLAG_ENUM_ATTR ButtonTransition : uint8_t {
+// set in one return value).
+enum class ButtonTransition : uint8_t {
     None         = 0,
     Pressed      = 1 << 0,
     Released     = 1 << 1,
     LongPressed  = 1 << 2,
     DoubleTapped = 1 << 3,
 };
-#undef FLAG_ENUM_ATTR
 
+// NOLINTBEGIN(clang-analyzer-optin.core.EnumCastOutOfRange) - OR'd-together
+// combinations (e.g. Pressed|LongPressed) are deliberately not individually
+// named enumerators; that's the point of a bitmask enum. The [[clang::flag_enum]]
+// attribute exists for exactly this case but doesn't suppress this specific
+// analyzer checker, so NOLINT is the precise fix (same escape hatch CLAUDE.md's
+// Linting section already documents using for the doctest.h NewDeleteLeaks
+// false positive).
 constexpr ButtonTransition operator|(ButtonTransition a, ButtonTransition b) {
     return static_cast<ButtonTransition>(static_cast<uint8_t>(a) | static_cast<uint8_t>(b));
 }
 constexpr ButtonTransition operator&(ButtonTransition a, ButtonTransition b) {
     return static_cast<ButtonTransition>(static_cast<uint8_t>(a) & static_cast<uint8_t>(b));
 }
+// NOLINTEND(clang-analyzer-optin.core.EnumCastOutOfRange)
 constexpr ButtonTransition& operator|=(ButtonTransition& a, ButtonTransition b) {
     a = a | b;
     return a;
