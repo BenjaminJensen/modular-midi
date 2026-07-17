@@ -78,9 +78,9 @@ public:
         }
     }
 
-    bool is_pressed() const { return m_is_pressed; }
-    bool was_long_pressed() const { return m_long_press_triggered; }
-    bool was_double_tapped() const { return m_double_tap_triggered; }
+    [[nodiscard]] bool is_pressed() const { return m_is_pressed; }
+    [[nodiscard]] bool was_long_pressed() const { return m_long_press_triggered; }
+    [[nodiscard]] bool was_double_tapped() const { return m_double_tap_triggered; }
 
 private:
     uint8_t m_id;
