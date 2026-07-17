@@ -28,7 +28,7 @@ struct ButtonPayload {
     static constexpr ButtonPayload unpack(uint32_t payload) {
         return ButtonPayload(
             static_cast<uint8_t>(payload >> 16),
-            static_cast<ButtonEventState>(payload >> 8),
+            static_cast<ButtonEventState>((payload >> 8) & 0xFF),
             static_cast<uint8_t>(payload & 0xFF)
         );
     }

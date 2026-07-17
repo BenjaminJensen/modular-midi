@@ -1,6 +1,7 @@
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include "doctest.h"
 
+#include <array>
 #include <string_view>
 #include "services/button_payload.h"
 
@@ -19,7 +20,7 @@ TEST_CASE("unpack() round-trips the id packed in") {
 }
 
 TEST_CASE("unpack() round-trips each ButtonEventState") {
-    ButtonEventState states[] = {
+    std::array states = {
         ButtonEventState::Pressed,
         ButtonEventState::Released,
         ButtonEventState::LongPressed,
