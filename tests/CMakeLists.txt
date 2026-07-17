@@ -52,3 +52,29 @@ target_include_directories(button_service_tests PRIVATE
 )
 
 add_test(NAME button_service_tests COMMAND button_service_tests)
+
+add_executable(button_payload_tests
+    shared/services/button_payload_test.cpp
+)
+
+target_include_directories(button_payload_tests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/shared
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/libs/doctest
+    ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+add_test(NAME button_payload_tests COMMAND button_payload_tests)
+
+add_executable(system_service_tests
+    shared/services/system_service_test.cpp
+)
+
+target_include_directories(system_service_tests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/shared
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/libs/doctest
+    ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+add_test(NAME system_service_tests COMMAND system_service_tests)
