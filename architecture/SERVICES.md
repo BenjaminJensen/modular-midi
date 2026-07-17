@@ -34,10 +34,10 @@ wrapper under `tests/`, mirroring the `src/` path (`src/shared/services/button_s
 TU to exist on the host at all requires pulling the RTOS dependency out from behind a concept first
 — that's the point of the vocabulary below.
 
-Pre-existing hardware-coupled headers that predate this rule (`display.h`, `st7789.h`,
-`async_logger.h` — see HAL.md's "target design vs. current state" section) are not retroactively
-required to gain wrappers; this is a rule for new/refactored Service code, same incremental
-philosophy as the rest of the linting setup (see CLAUDE.md's Linting section).
+Pre-existing hardware-coupled headers that predate this rule (`display.h`, `st7789.h` — see
+HAL.md's "target design vs. current state" section) are not retroactively required to gain
+wrappers; this is a rule for new/refactored Service code, same incremental philosophy as the rest
+of the linting setup (see CLAUDE.md's Linting section).
 
 ## 3. Concept Vocabulary
 
