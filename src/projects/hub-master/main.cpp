@@ -39,7 +39,7 @@ void blink_task(void *pvParameters) {
 }
 
 /*
- This is a non FreeRTOS task that will run on Core 1.
+ This is a non FreeRTOS task that will run on Core 1. 
  It will be used for updating the display and drawing on screen.
 */
 void display_task(void) {
@@ -50,16 +50,16 @@ void display_task(void) {
     display.init();
 
     for(;;) {
-
+        
         //Logger::log("Display task\n");
   //      busy_wait_ms(5);
         gpio_put(LED_PIN, 1);
 //        busy_wait_ms(5);
         //display.clear_screen(color); // Clear to red for testing
-        display.task(); // This will trigger the LVGL flush callback, which updates the display with the current draw buffer content
-
+        display.task(); // This will trigger the LVGL flush callback, which updates the display with the current draw buffer content    
+        
         busy_wait_ms(1);
-        gpio_put(LED_PIN, 0);
+        gpio_put(LED_PIN, 0);    
     }
 }
 
@@ -77,7 +77,7 @@ int main() {
     // This now wakes up the RTT driver instead of USB/UART
 
     // stdio_init_all();
-
+    
     // Initialize the RTT Logger
     // (This safely configures RTT channels 1 and 2 for Core 0 and Core 1)
     g_log_sink.init();
@@ -87,7 +87,7 @@ int main() {
     g_log.debug() << "System starting up...";
     g_log.debug() << "Running on Core: " << get_core_num();
     g_log.debug() << "String test: " << "Hello World!";
-
+    
     // Create the task and pin it strictly to Core 0
     blink_task_handle = xTaskCreateStatic(
         blink_task,           // Function pointer
@@ -98,7 +98,7 @@ int main() {
         xStack,            // Pointer to the stack array
         &xTaskBuffer       // Pointer to the TCB buffer
     );
-
+    
     // Task for Core 0 (MIDI - High Priority)
     printf("Starting 'display_task' on core 1:\n");
 
@@ -109,6 +109,6 @@ int main() {
     multicore_launch_core1(display_task);
 
     vTaskStartScheduler();
-
-    while(1);
+    
+    while(1); 
 }
