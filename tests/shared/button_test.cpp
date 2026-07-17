@@ -13,18 +13,22 @@ namespace {
     constexpr uint16_t LONG_PRESS_MS = 200;
     constexpr uint8_t TICK_MS = 10;
 
-    void press_debounced(Button<FakePin, FakeSink>& button, FakePin& pin) {
+    ButtonTransition press_debounced(Button<FakePin, FakeSink>& button, FakePin& pin) {
         pin.reading = false; // active-low: pressed
+        ButtonTransition transitions = ButtonTransition::None;
         for (int i = 0; i < 4; ++i) {
-            button.update(TICK_MS);
+            transitions |= button.update(TICK_MS);
         }
+        return transitions;
     }
 
-    void release_debounced(Button<FakePin, FakeSink>& button, FakePin& pin) {
+    ButtonTransition release_debounced(Button<FakePin, FakeSink>& button, FakePin& pin) {
         pin.reading = true; // active-low: released
+        ButtonTransition transitions = ButtonTransition::None;
         for (int i = 0; i < 4; ++i) {
-            button.update(TICK_MS);
+            transitions |= button.update(TICK_MS);
         }
+        return transitions;
     }
 }
 
@@ -35,7 +39,7 @@ TEST_CASE("button reports not pressed before debounce completes") {
     Button button(0, &pin, logger, LONG_PRESS_MS);
 
     pin.reading = false;
-    button.update(TICK_MS);
+    (void)button.update(TICK_MS);
 
     CHECK_FALSE(button.is_pressed());
 }
@@ -46,9 +50,10 @@ TEST_CASE("button debounces into pressed state after 4 consecutive low readings"
     Logger<FakeSink> logger(sink);
     Button button(0, &pin, logger, LONG_PRESS_MS);
 
-    press_debounced(button, pin);
+    ButtonTransition transitions = press_debounced(button, pin);
 
     CHECK(button.is_pressed());
+    CHECK(has(transitions, ButtonTransition::Pressed));
 }
 
 TEST_CASE("button debounces back to released after 4 consecutive high readings") {
@@ -60,26 +65,27 @@ TEST_CASE("button debounces back to released after 4 consecutive high readings")
     press_debounced(button, pin);
     REQUIRE(button.is_pressed());
 
-    release_debounced(button, pin);
+    ButtonTransition transitions = release_debounced(button, pin);
 
     CHECK_FALSE(button.is_pressed());
+    CHECK(has(transitions, ButtonTransition::Released));
 }
 
-TEST_CASE("holding past the long-press threshold sets was_long_pressed") {
+TEST_CASE("holding past the long-press threshold returns a LongPressed transition") {
     FakePin pin;
     FakeSink sink;
     Logger<FakeSink> logger(sink);
     Button button(0, &pin, logger, LONG_PRESS_MS);
 
     press_debounced(button, pin);
-    REQUIRE_FALSE(button.was_long_pressed());
 
+    ButtonTransition transitions = ButtonTransition::None;
     // Keep holding until hold_timer passes LONG_PRESS_MS
     for (uint16_t held = 0; held < LONG_PRESS_MS; held += TICK_MS) {
-        button.update(TICK_MS);
+        transitions |= button.update(TICK_MS);
     }
 
-    CHECK(button.was_long_pressed());
+    CHECK(has(transitions, ButtonTransition::LongPressed));
 }
 
 TEST_CASE("releasing before the long-press threshold does not trigger a long press") {
@@ -89,27 +95,30 @@ TEST_CASE("releasing before the long-press threshold does not trigger a long pre
     Button button(0, &pin, logger, LONG_PRESS_MS);
 
     press_debounced(button, pin);
-    button.update(TICK_MS); // hold briefly, well under the threshold
+    (void)button.update(TICK_MS); // hold briefly, well under the threshold
 
-    release_debounced(button, pin);
+    ButtonTransition transitions = release_debounced(button, pin);
 
-    CHECK_FALSE(button.was_long_pressed());
+    CHECK_FALSE(has(transitions, ButtonTransition::LongPressed));
 }
 
-TEST_CASE("two quick taps within the gap window trigger a double tap") {
+TEST_CASE("two quick taps within the gap window trigger a double tap on the second release") {
     FakePin pin;
     FakeSink sink;
     Logger<FakeSink> logger(sink);
     Button button(0, &pin, logger, LONG_PRESS_MS);
 
     press_debounced(button, pin);
-    release_debounced(button, pin);
-    CHECK_FALSE(button.was_double_tapped());
+    ButtonTransition first_release = release_debounced(button, pin);
+    CHECK_FALSE(has(first_release, ButtonTransition::DoubleTapped));
 
     press_debounced(button, pin);
-    release_debounced(button, pin);
+    ButtonTransition second_release = release_debounced(button, pin);
 
-    CHECK(button.was_double_tapped());
+    // The tick that resolves the double tap is the same tick as the second
+    // release edge itself - both transitions fire from the same update() call.
+    CHECK(has(second_release, ButtonTransition::Released));
+    CHECK(has(second_release, ButtonTransition::DoubleTapped));
 }
 
 TEST_CASE("a single tap followed by the gap window expiring does not trigger a double tap") {
@@ -121,12 +130,13 @@ TEST_CASE("a single tap followed by the gap window expiring does not trigger a d
     press_debounced(button, pin);
     release_debounced(button, pin);
 
+    ButtonTransition transitions = ButtonTransition::None;
     // Let the gap window expire without a second tap
     for (uint16_t waited = 0; waited < LONG_PRESS_MS; waited += TICK_MS) {
-        button.update(TICK_MS);
+        transitions |= button.update(TICK_MS);
     }
 
-    CHECK_FALSE(button.was_double_tapped());
+    CHECK_FALSE(has(transitions, ButtonTransition::DoubleTapped));
 }
 
 TEST_CASE("pressing the button logs a line identifying the button by id") {
@@ -162,7 +172,7 @@ TEST_CASE("holding past the long-press threshold logs a long press line") {
 
     press_debounced(button, pin);
     for (uint16_t held = 0; held < LONG_PRESS_MS; held += TICK_MS) {
-        button.update(TICK_MS);
+        (void)button.update(TICK_MS);
     }
 
     REQUIRE_FALSE(sink.lines.empty());
@@ -182,4 +192,13 @@ TEST_CASE("a double tap logs a double tap line") {
 
     REQUIRE_FALSE(sink.lines.empty());
     CHECK(sink.lines.back() == "Button 0 double tap");
+}
+
+TEST_CASE("id() returns the id the button was constructed with") {
+    FakePin pin;
+    FakeSink sink;
+    Logger<FakeSink> logger(sink);
+    Button button(7, &pin, logger, LONG_PRESS_MS);
+
+    CHECK(button.id() == 7);
 }
