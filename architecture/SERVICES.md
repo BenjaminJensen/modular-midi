@@ -44,7 +44,7 @@ of the linting setup (see CLAUDE.md's Linting section).
 | Concept | Status | Concept file | rp2350 implementation | Host test double |
 |---|---|---|---|---|
 | `TaskRunner` | **Implemented** | `src/shared/hal/task_runner_concept.h` | `src/shared/hal/rp2350/freertos_task_runner.h` | `tests/mocks/fake_task_runner.h` |
-| `Queue<T, N>` | Target design, not implemented | — | — | — |
+| `EventQueue<T, N>` | Target design, not implemented — see `architecture/EVENT_SYSTEM.md` | — | — | — |
 | `SpinLock` / `SpinLockGuard` | Target design, not implemented | — | — | — |
 | `Mutex` | Target design, not implemented | — | — | — |
 
@@ -88,12 +88,14 @@ loop and would hang a test. This is enough to unit-test a Service's `update()`/`
 logic directly, and to assert `start()` wires the right entry point/context through, entirely on
 the host, with real doctest coverage and real clang-tidy coverage via the wrapper TU.
 
-### `Queue<T, N>` (target design, not implemented)
+### `EventQueue<T, N>` (target design, not implemented)
 
 A fixed-capacity, statically-allocated typed queue, exposed as native modern C++ (no `QueueHandle_t`
 or `xQueueReceive` in the calling code) rather than a thin FreeRTOS wrapper — so, like `TaskRunner`,
-it can be backed by something other than FreeRTOS on the host. Intended first consumer:
-`src/shared/event/event_engine.h`'s dispatch/routing, once that lands.
+it can be backed by something other than FreeRTOS on the host. Named `EventQueue` rather than the
+generic `Queue` to leave room for other queue shapes the system may need later that aren't part of
+the event system. Intended first consumer: `src/shared/event/event_engine.h`'s dispatch/routing —
+see `architecture/EVENT_SYSTEM.md` for the full design.
 
 ### `SpinLock` / `SpinLockGuard` and `Mutex` (target design, not implemented)
 
