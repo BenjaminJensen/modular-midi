@@ -1,0 +1,11 @@
+{
+  "windows": {
+    "arm_gcc_sysroot": "C:/Program Files (x86)/Arm GNU Toolchain arm-none-eabi/14.3 rel1/arm-none-eabi",
+    "clang_tidy": "C:/Program Files/LLVM/bin/clang-tidy.exe"
+  },
+  "linux": {
+    "arm_gcc_sysroot": "/opt/arm-gnu-toolchain/arm-none-eabi",
+    "clang_tidy": "clang-tidy"
+  },
+  "arm_gcc_version": "14.3.1"
+}
