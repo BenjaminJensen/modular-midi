@@ -14,6 +14,10 @@ jobs:
         uses: actions/checkout@v7
         with:
           submodules: recursive
+          fetch-depth: 0
+
+      - name: Ensure origin/main is available for diffing
+        run: git fetch origin main:refs/remotes/origin/main
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -37,3 +41,8 @@ jobs:
         run: |
           docker run --rm -v ${{ github.workspace }}:/workspace -w /workspace modular-midi-ci:latest \
             bash -c "cmake -G Ninja -S tests -B build-tests -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ && cmake --build build-tests && ctest --test-dir build-tests --output-on-failure"
+
+      - name: Lint changed files
+        run: |
+          docker run --rm -v ${{ github.workspace }}:/workspace -w /workspace modular-midi-ci:latest \
+            python3 tools/lint_changed.py --base origin/main
