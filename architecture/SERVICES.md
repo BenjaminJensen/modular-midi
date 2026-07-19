@@ -23,7 +23,7 @@ which is what makes it possible to unit-test and lint an otherwise RTOS-coupled 
 clang-tidy only meaningfully analyzes a file through an actual translation unit that compiles it —
 a bare header sitting in `src/shared` with no `.cpp` anywhere that includes it effectively gets no
 reliable coverage. `button.h` avoids this because `tests/shared/button_test.cpp` compiles it on the
-host as a real doctest binary; that TU is what both `lint.ps1`'s `tests/` leg and `ctest` exercise.
+host as a real doctest binary; that TU is what both `tools/clang-tidy.py` and `ctest` exercise.
 
 Before this document, `button_service.h` had no such TU: it depended directly on
 `xTaskCreateStatic`/`vTaskDelay`/`UBaseType_t`/`StackType_t`/`StaticTask_t`, none of which exist in

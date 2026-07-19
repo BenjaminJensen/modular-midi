@@ -42,7 +42,7 @@ jobs:
           docker run --rm -v ${{ github.workspace }}:/workspace -w /workspace modular-midi-ci:latest \
             bash -c "cmake -G Ninja -S tests -B build-tests -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ && cmake --build build-tests && ctest --test-dir build-tests --output-on-failure"
 
-      - name: Diff-based clang-tidy
+      - name: Lint changed files
         run: |
           docker run --rm -v ${{ github.workspace }}:/workspace -w /workspace modular-midi-ci:latest \
-            bash tools/lint-diff.sh origin/main
+            python3 tools/lint_changed.py --base origin/main

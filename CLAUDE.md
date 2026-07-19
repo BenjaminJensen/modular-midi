@@ -31,7 +31,7 @@ Output ELF for the current project: `build/src/projects/hub-master/hub_master.el
 
 ### Container build (optional, transitional)
 
-A Docker image (`docker/Dockerfile`) mirrors this repo's full tool stack — ARM cross-compiler (pinned to the exact same toolchain release as the native Windows setup, ARM GNU Toolchain 14.3.rel1), plus a native `gcc`/`g++` and `clang-tidy` for the Testing/Linting workflows below — so the same image can eventually serve as both a local build environment and the CI image. **It's currently supplementary, not a replacement**: the native Windows/MSYS2 toolchains stay the primary documented path until the container's output has been validated for longer. Nothing about flashing/debugging changes or moves into the container — J-Link/Ozone need direct USB access, which containers can't do.
+A Docker image (`docker/Dockerfile`) mirrors this repo's full tool stack — ARM cross-compiler (pinned to the exact same toolchain release as the native Windows setup, ARM GNU Toolchain 14.3.rel1), plus a native `gcc`/`g++` and `clang-tidy` for the Testing/Linting workflows below — so the same image can eventually serve as both a local build environment and the CI image. **It's currently supplementary, not a replacement**: the native Windows toolchains (MSYS2 for host tests, a standalone LLVM install for clang-tidy) stay the primary documented path until the container's output has been validated for longer. Nothing about flashing/debugging changes or moves into the container — J-Link/Ozone need direct USB access, which containers can't do.
 
 ```powershell
 ./build-docker.ps1
@@ -41,31 +41,24 @@ Builds the image if it doesn't exist yet, then runs the firmware build inside it
 
 ## Linting
 
-[clang-tidy](https://clang.llvm.org/extra/clang-tidy/) (MSYS2 UCRT64 package `mingw-w64-ucrt-x86_64-clang-tools-extra`) is configured via `.clang-tidy` at the repo root, with a deliberately lean check set: `bugprone-*`, `modernize-*`, `performance-*` (minus `modernize-use-trailing-return-type`, a purely stylistic check, and minus `clang-analyzer-cplusplus.NewDeleteLeaks` — see below). `cppcoreguidelines-*` is intentionally **not** enabled yet — it's too opinionated for the pre-refactor HAL code (see HAL section below), which is a known rewrite target anyway; revisit once that refactor lands. `HeaderFilterRegex` scopes diagnostics to `src/shared` and `src/projects`, excluding vendored `src/libs/*`. Existing findings have not been fixed repo-wide — this is tooling setup, not a cleanup pass. CI (see below) only lints the diff, not the whole repo, specifically so this doesn't have to change until the pre-refactor HAL code is actually touched.
+[clang-tidy](https://clang.llvm.org/extra/clang-tidy/) is configured via `.clang-tidy` at the repo root, with a deliberately lean check set: `bugprone-*`, `modernize-*`, `performance-*` (minus `modernize-use-trailing-return-type`, a purely stylistic check, and minus `clang-analyzer-cplusplus.NewDeleteLeaks` — see below). `cppcoreguidelines-*` is intentionally **not** enabled yet — it's too opinionated for the pre-refactor HAL code (see HAL section below), which is a known rewrite target anyway; revisit once that refactor lands. `HeaderFilterRegex` scopes diagnostics to `src/shared` and `src/projects`, excluding vendored `src/libs/*`. Existing findings have not been fixed repo-wide — this is tooling setup, not a cleanup pass.
 
-**`clang-analyzer-*` (the Clang Static Analyzer) isn't in the `Checks:` glob above, but don't assume it's off.** CI's container runs clang-tidy from LLVM 18, and that version enables a default subset of `clang-analyzer-*` checks regardless of whether `Checks:` matches them — a version-specific quirk later clang-tidy releases fixed by actually respecting the glob (confirmed locally: MSYS2's LLVM 22 clang-tidy correctly skips them). So `clang-analyzer-*` findings can show up in CI without a matching local repro unless your local clang-tidy happens to be old enough to share the bug — check the CI log directly rather than trusting a clean local run for these. Most are worth fixing (one caught a real uninitialized-field bug in `Button`); `clang-analyzer-cplusplus.NewDeleteLeaks` specifically is excluded because it false-positives inside vendored `src/libs/doctest/doctest.h`'s internal `String` class whenever a *new* test file's `CHECK`/`REQUIRE` macros get analyzed for the first time (doctest.h isn't covered by `HeaderFilterRegex`, but that doesn't suppress `clang-analyzer-*` diagnostics on LLVM 18 either — same underlying quirk).
+Locally, `clang-tidy` comes from a standalone [LLVM release](https://github.com/llvm/llvm-project/releases) (`LLVM-*-win64.exe` on Windows, installed to its default location) — **not** MSYS2's `clang-tools-extra` package. MSYS2 UCRT64 is still required, just for the host test toolchain (see Testing below), not for clang-tidy itself.
 
-Both build trees generate `compile_commands.json` (`CMAKE_EXPORT_COMPILE_COMMANDS ON` is set in both `CMakeLists.txt` files), so which one to pass via `-p` depends on which build actually compiles the file in question:
+**`clang-analyzer-*` (the Clang Static Analyzer) isn't in the `Checks:` glob above, but don't assume it's off.** CI's container runs clang-tidy from LLVM 18, and that version enables a default subset of `clang-analyzer-*` checks regardless of whether `Checks:` matches them — a version-specific quirk later clang-tidy releases fixed by actually respecting the glob (confirmed locally: the standalone LLVM 22 install correctly skips them). So `clang-analyzer-*` findings can show up in CI without a matching local repro unless your local clang-tidy happens to be old enough to share the bug — check the CI log directly rather than trusting a clean local run for these. Most are worth fixing (one caught a real uninitialized-field bug in `Button`); `clang-analyzer-cplusplus.NewDeleteLeaks` specifically is excluded because it false-positives inside vendored `src/libs/doctest/doctest.h`'s internal `String` class whenever a *new* test file's `CHECK`/`REQUIRE` macros get analyzed for the first time (doctest.h isn't covered by `HeaderFilterRegex`, but that doesn't suppress `clang-analyzer-*` diagnostics on LLVM 18 either — same underlying quirk).
 
-- **Host-testable code** (`tests/`, and anything it includes like `src/shared/button.h`/`src/shared/services/button_service.h`) — build tree `build-tests`, no extra flags needed:
-  ```powershell
-  clang-tidy -p build-tests tests/shared/button_test.cpp
-  ```
-- **Firmware code** (anything under `src/projects` or `src/shared` that pulls in pico-sdk/FreeRTOS) — build tree `build`. clang-tidy parses with **clang's** frontend regardless of which compiler produced the compile command, and clang can't auto-detect the ARM GNU Toolchain's multilib header layout the way GCC can, so it needs explicit target/sysroot/include flags:
-  ```powershell
-  $toolchain = "C:/Program Files (x86)/Arm GNU Toolchain arm-none-eabi/14.3 rel1"
-  $sysroot = "$toolchain/arm-none-eabi"
-  $cxxInc = "$sysroot/include/c++/14.3.1"
-  $cxxTargetInc = "$cxxInc/arm-none-eabi/thumb/v8-m.main+fp/hard"  # Cortex-M33, hard float
-  clang-tidy -p build src/shared/hal/rp2350/display.cpp `
-    --extra-arg=--target=arm-none-eabi `
-    --extra-arg="--sysroot=$sysroot" `
-    --extra-arg="-isystem$cxxInc" `
-    --extra-arg="-isystem$cxxTargetInc"
-  ```
-  Without these, clang-tidy fails outright (`unknown target CPU 'armv8-m.main+fp+dsp'`, then `'cstdint' file not found`) rather than just misbehaving — if it errors like that, this is why.
+Run it via `tools/clang-tidy.py`, not `clang-tidy` directly — it picks the right compile database (`build` vs `build-tests`, depending on which one actually compiles the file in question) and, for firmware code, the ARM cross-compile flags clang needs, automatically:
 
-The same two flavors of command also run inside the container from the Build section above, with clang-18 and Linux paths (`/opt/arm-gnu-toolchain/arm-none-eabi/...` instead of `C:/Program Files (x86)/...`) — the underlying issue and fix are identical, just on a different filesystem. Still supplementary; MSYS2 stays primary for now.
+```powershell
+python3 tools/clang-tidy.py tests/shared/button_test.cpp
+python3 tools/clang-tidy.py src/shared/hal/rp2350/display.cpp
+```
+
+clang-tidy parses with **clang's** frontend regardless of which compiler produced the compile command, and clang can't auto-detect the ARM GNU Toolchain's multilib header layout the way GCC can — without the extra target/sysroot/include flags the script adds automatically for firmware code, it fails outright (`unknown target CPU 'armv8-m.main+fp+dsp'`, then `'cstdint' file not found`) rather than just misbehaving. Requires `build/` and/or `build-tests/` already configured (`build.ps1`/`test.ps1`, or the Docker equivalents — the same script also works unmodified inside the container, via `--src-build-dir build-docker --tests-build-dir build-tests-docker`). Machine-specific paths (the ARM sysroot, clang-tidy's own Windows fallback location) live in `tools/paths.json`, not hardcoded in the script.
+
+The script only takes a single file — a `.c`/`.cpp` translation unit, not a header or a directory (directory/recursive scanning was deliberately deferred; invoke it once per file if you need several, e.g. across a diff). Output is a single JSON document on stdout (`{"summary": {...}, "findings": [...]}`, or `{"summary": {"status": "error", ...}, "error": "..."}` for a setup failure like a missing binary or a file not in either compile database) — progress/diagnostic text goes to stderr instead, so stdout stays parseable. Exit code is 0 only when clean.
+
+To lint everything relevant to the current branch instead of one file at a time, `tools/changed_files.py [--base main] [--ext .cpp,.h]` lists changed files as the union of two git-native sources — every file touched by a commit on the branch since it diverged from `--base` (what CI sees: a clean checkout), and every file with an uncommitted change right now, staged or not, including untracked files (what a developer or agent mid-edit sees). Deleted files are dropped by checking the path still exists, not by interpreting git's status letters. This replaces the old `tools/lint-diff.sh` (`clang-tidy-diff.py` parsing a unified diff, which silently reported "clean" on a malformed or empty diff) with a plain file list, so whole files go through `tools/clang-tidy.py` rather than diff hunks. `tools/lint_changed.py [--base main]` composes both — gets the changed-file list, runs `tools/clang-tidy.py` on each, and aggregates the per-file JSON results into one payload (`files_checked`, a merged `findings` list, and `file_errors` for any file that failed to lint) — and is what backs the CI step below.
 
 ## Testing
 
@@ -101,26 +94,10 @@ Hardware-coupled code — the concrete concept implementations themselves (`Pin`
 
 ## Continuous Integration
 
-GitHub Actions (`.github/workflows/ci.yml`) runs on every PR into `main` and every push to `main`: firmware build, host tests, and diff-based clang-tidy, all inside the same `docker/Dockerfile` image used locally (see Build section above). A native Linux runner has no WSL2 boundary, so the local Docker slowdown noted there shouldn't apply here.
+GitHub Actions (`.github/workflows/ci.yml`) runs on every PR into `main` and every push to `main`: firmware build, host tests, and changed-file clang-tidy, inside the same `docker/Dockerfile` image used locally (see Build section above). A native Linux runner has no WSL2 boundary, so the local Docker slowdown noted there shouldn't apply here.
 
 - **Firmware build & host tests**: the same commands documented in Build/Testing above, just run via `docker run` against a fresh checkout instead of `build-docker.ps1`/manual invocation.
-- **Diff-based clang-tidy**: `tools/lint-diff.sh` runs [clang-tidy-diff.py](https://github.com/llvm/llvm-project/blob/main/clang-tools-extra/clang-tidy/tool/clang-tidy-diff.py) (ships with `clang-tools-extra`, already in the image) against only the lines actually changed relative to `origin/main` — not the whole repo. This is deliberate, not a shortcut: the pre-refactor HAL code (see Architecture below) already has a large volume of findings, so a repo-wide gate would force either a big upfront cleanup or a pile of `NOLINT` suppressions. New/changed code must be clean; untouched legacy code isn't retroactively flagged, and coverage grows organically as code actually gets touched.
-
-  ```powershell
-  ./lint.ps1
-  ```
-
-  Runs the exact CI sequence locally, against the current branch's commits: builds the `modular-midi-build` image if it doesn't exist yet, fetches `origin/main`, configures+builds `build-docker/`+`build-tests-docker/` (never touches your native `build/`/`build-tests/`), then runs `tools/lint-diff.sh origin/main build-docker build-tests-docker` inside the container.
-
-  **Must be run from a real PowerShell shell, not Git Bash** — Git Bash's path translation mangles the `-v "${PWD}:/workspace"` mount spec into something like `C:/Program Files/Git/workspace`, so `docker run` fails outright rather than just misbehaving. Requires Docker Desktop running, and requires at least one commit on the current branch: `tools/lint-diff.sh` diffs `origin/main...HEAD`, so with nothing committed yet that diff is empty and every file silently reports "No relevant changes found" — which reads as "clean" but actually means "nothing was checked."
-
-  The underlying script, if you need to point it at something other than the defaults:
-
-  ```
-  tools/lint-diff.sh [base-ref] [src-build-dir] [tests-build-dir]
-  ```
-
-  Defaults (`origin/main`, `build`, `build-tests`) match what CI configures fresh each run; `lint.ps1` passes `build-docker`/`build-tests-docker` explicitly so it never collides with your native trees.
+- **Lint changed files**: `tools/lint_changed.py --base origin/main` runs `tools/changed_files.py` (see Linting above) to find every `.c`/`.cpp` file changed relative to `origin/main`, then lints each one with `tools/clang-tidy.py`, aggregating the per-file JSON results into one payload. This is deliberately scoped to changed files, not the whole repo: the pre-refactor HAL code (see Architecture below) already has a large volume of findings, so a repo-wide gate would force either a big upfront cleanup or a pile of `NOLINT` suppressions. New/changed code must be clean; untouched legacy code isn't retroactively flagged, and coverage grows organically as code actually gets touched. Requires the checkout to have `fetch-depth: 0` and `origin/main` fetched (both already set up in the workflow) so `tools/changed_files.py` can compute a merge base.
 
 **Branch protection is enabled on `main`**: the `build-test-lint` check must pass, a PR is required (direct pushes are rejected, `enforce_admins` is on so this applies to the repo owner too — verified by attempting a direct push and confirming GitHub rejects it), and linear history is required (GitHub's plain "Merge commit" button is disabled; use "Squash and merge" or "Rebase and merge"). This is what actually enforces the Git workflow rule above, not just convention.
 

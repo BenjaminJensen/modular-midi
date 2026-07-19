@@ -13,6 +13,7 @@ obj/
 # Tools and SDK temp files
 /tools/picotool/picotool-build/
 /tools/picotool/picotool-src/
+__pycache__/
 
 # VS Code / IDE settings
 #.vscode/
