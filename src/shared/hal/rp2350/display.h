@@ -6,6 +6,7 @@
 #include "lvgl.h"
 #include "pico/stdlib.h"
 #include "shared/hal/display_driver_concept.h"
+#include "shared/render/label.h"
 
 /*
     LVGL glue for one physical display. Templated on the hardware driver
@@ -48,11 +49,14 @@ public:
         lv_display_set_draw_buffers(m_lv_display, &m_draw_buf, nullptr);
 
         lv_display_set_flush_cb(m_lv_display, &Display::flush_cb_trampoline);
+
+        m_label = lv_label_create(lv_display_get_screen_active(m_lv_display));
+        lv_obj_center(m_label);
     }
 
     // Drives LVGL's own timer handler and, once a previously started flush's
     // DMA transfer has finished, tells LVGL it can start the next one. Call
-    // this from a tight loop (see display_task in main.cpp).
+    // this from a tight loop (see render_task in main.cpp).
     void task() {
         if (m_flush_pending && !m_driver.is_busy()) {
             m_flush_pending = false;
@@ -61,7 +65,32 @@ public:
         lv_timer_handler();
     }
 
+    // Applies a Mailbox entry (see architecture/EVENT_SYSTEM.md's Render Engine
+    // design) to this display's Label widget. Called by render_task only when
+    // Mailbox::take_if_dirty() reports a change - not every loop iteration.
+    void apply_label(const Label& label) {
+        lv_label_set_text(m_label, label.text_cstr());
+        lv_obj_set_style_text_color(m_label, to_lv_color(label.color), 0);
+        lv_obj_set_style_text_font(m_label, to_lv_font(label.font), 0);
+    }
+
 private:
+    static lv_color_t to_lv_color(ColorPalette color) {
+        switch (color) {
+            case ColorPalette::Active:  return lv_palette_main(LV_PALETTE_GREEN);
+            case ColorPalette::Default: return lv_color_white();
+        }
+        return lv_color_white();
+    }
+
+    static const lv_font_t* to_lv_font(FontSize font) {
+        switch (font) {
+            case FontSize::Small: return &lv_font_montserrat_20;
+            case FontSize::Large: return &lv_font_montserrat_42;
+        }
+        return &lv_font_montserrat_42;
+    }
+
     static constexpr uint16_t SCREEN_WIDTH = 284;
     static constexpr uint16_t SCREEN_HEIGHT = 76;
     static constexpr size_t DRAW_BUF_SIZE = static_cast<size_t>(SCREEN_WIDTH) * SCREEN_HEIGHT * 2;
@@ -71,6 +100,7 @@ private:
     lv_draw_buf_t m_draw_buf{};
     std::array<uint8_t, DRAW_BUF_SIZE> m_draw_buf_raw{};
     bool m_flush_pending = false;
+    lv_obj_t* m_label = nullptr;
 
     static void ensure_lvgl_globals_initialized() {
         static bool initialized = false;

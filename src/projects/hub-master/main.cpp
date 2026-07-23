@@ -15,6 +15,8 @@
 #include "shared/hal/rp2350/pin.h"
 #include "shared/hal/rp2350/freertos_task_runner.h"
 #include "shared/hal/rp2350/freertos_event_queue.h"
+#include "shared/hal/rp2350/render_engine.h"
+#include "shared/render/mailbox.h"
 
 // Display hw: SPI1 + CS/DC/RST pins matching the panel's wiring on this board.
 static SpiDmaBus display_spi(spi1, 10, 11, 10 * 1000 * 1000);
@@ -25,6 +27,15 @@ static PicoDelay display_delay;
 static ST7789<SpiDmaBus, OutputPin, OutputPin, OutputPin, PicoDelay> st7789(
     display_spi, display_cs, display_dc, display_rst, display_delay);
 static Display<ST7789<SpiDmaBus, OutputPin, OutputPin, OutputPin, PicoDelay>> display(st7789);
+
+// Cross-core Mailbox for Render Engine label updates (see architecture/EVENT_SYSTEM.md,
+// docs/adr/0001). Sized for the full 4-display hardware spec even though only display 0
+// is wired up below - display_ids 1-3 simply stay untouched until those displays exist.
+static constexpr uint8_t NUM_DISPLAYS = 4;
+static Mailbox<NUM_DISPLAYS> render_mailbox;
+static RenderEngine<ST7789<SpiDmaBus, OutputPin, OutputPin, OutputPin, PicoDelay>, NUM_DISPLAYS>
+    render_engine(display, render_mailbox, 0);
+
 static FreeRTOSTaskRunner<512> button_runner("ButtonService", 1);
 static FreeRTOSEventQueue<8> button_events;
 static ButtonService<Pin, RttSink, FreeRTOSTaskRunner<512>, FreeRTOSEventQueue<8>> button_service(button_runner, button_events);
@@ -50,29 +61,13 @@ void blink_task(void *pvParameters) {
     }
 }
 
-/*
- This is a non FreeRTOS task that will run on Core 1.
- It will be used for updating the display and drawing on screen.
-*/
-void display_task() {
-    const uint LED_PIN = 1;
-    gpio_init(LED_PIN);
-    gpio_set_dir(LED_PIN, GPIO_OUT);
-
-    display.init();
-
-    for(;;) {
-        
-        //Logger::log("Display task\n");
-  //      busy_wait_ms(5);
-        gpio_put(LED_PIN, true);
-//        busy_wait_ms(5);
-        //display.clear_screen(color); // Clear to red for testing
-        display.task(); // This will trigger the LVGL flush callback, which updates the display with the current draw buffer content
-
-        busy_wait_ms(1);
-        gpio_put(LED_PIN, false);
-    }
+// multicore_launch_core1 takes a context-free void(*)(), so this trampoline
+// is the only thing that can't move into render_engine.h - the actual loop
+// (run_render_loop) and per-display logic (RenderEngine::update) both live
+// there. Reuses display_delay (stateless) rather than declaring a second
+// PicoDelay purely for this loop's per-iteration delay.
+[[noreturn]] void render_task() {
+    run_render_loop(render_engine, display_delay);
 }
 
 TaskHandle_t blink_task_handle = nullptr;
@@ -99,7 +94,12 @@ int main() {
     g_log.debug() << "System starting up...";
     g_log.debug() << "Running on Core: " << get_core_num();
     g_log.debug() << "String test: " << "Hello World!";
-    
+
+    // TEMPORARY: seeds render_mailbox with a test Label to verify the Render Engine
+    // pipeline (Mailbox -> render_task -> Display::apply_label -> LVGL -> pixels)
+    // end-to-end on target. Remove once RenderService writes real labels.
+    render_mailbox.write(0, Label::make("Hello", ColorPalette::Active, FontSize::Small));
+
     // Create the task and pin it strictly to Core 0
     blink_task_handle = xTaskCreateStatic(
         blink_task,           // Function pointer
@@ -112,13 +112,13 @@ int main() {
     );
     
     // Task for Core 0 (MIDI - High Priority)
-    printf("Starting 'display_task' on core 1:\n");
+    printf("Starting 'render_task' on core 1:\n");
 
     // Force Core 1 into a known reset state
     multicore_reset_core1();
 
     // There is a caveat when debugging, as this needs a system reset to be working
-    multicore_launch_core1(display_task);
+    multicore_launch_core1(render_task);
 
     vTaskStartScheduler();
 

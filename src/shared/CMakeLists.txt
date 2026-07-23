@@ -5,6 +5,7 @@ add_library(shared STATIC "")
 # Link the intermediate hal directory
 add_subdirectory(hal)
 add_subdirectory(services)
+add_subdirectory(render)
 
 # Keep common files and includes here 
 target_sources(shared PRIVATE

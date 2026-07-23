@@ -91,3 +91,29 @@ target_include_directories(st7789_tests PRIVATE
 )
 
 add_test(NAME st7789_tests COMMAND st7789_tests)
+
+add_executable(label_tests
+    shared/render/label_test.cpp
+)
+
+target_include_directories(label_tests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/shared
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/libs/doctest
+    ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+add_test(NAME label_tests COMMAND label_tests)
+
+add_executable(mailbox_tests
+    shared/render/mailbox_test.cpp
+)
+
+target_include_directories(mailbox_tests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/shared
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/libs/doctest
+    ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+add_test(NAME mailbox_tests COMMAND mailbox_tests)
