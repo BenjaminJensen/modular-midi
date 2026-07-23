@@ -15,6 +15,7 @@
 #include "shared/hal/rp2350/pin.h"
 #include "shared/hal/rp2350/freertos_task_runner.h"
 #include "shared/hal/rp2350/freertos_event_queue.h"
+#include "shared/hal/rp2350/render_engine.h"
 #include "shared/render/mailbox.h"
 
 // Display hw: SPI1 + CS/DC/RST pins matching the panel's wiring on this board.
@@ -32,6 +33,9 @@ static Display<ST7789<SpiDmaBus, OutputPin, OutputPin, OutputPin, PicoDelay>> di
 // is wired up below - display_ids 1-3 simply stay untouched until those displays exist.
 static constexpr uint8_t NUM_DISPLAYS = 4;
 static Mailbox<NUM_DISPLAYS> render_mailbox;
+static RenderEngine<ST7789<SpiDmaBus, OutputPin, OutputPin, OutputPin, PicoDelay>, NUM_DISPLAYS>
+    render_engine(display, render_mailbox, 0);
+
 static FreeRTOSTaskRunner<512> button_runner("ButtonService", 1);
 static FreeRTOSEventQueue<8> button_events;
 static ButtonService<Pin, RttSink, FreeRTOSTaskRunner<512>, FreeRTOSEventQueue<8>> button_service(button_runner, button_events);
@@ -57,30 +61,13 @@ void blink_task(void *pvParameters) {
     }
 }
 
-/*
- This is a non-FreeRTOS bare loop that runs on Core 1: the Render Engine
- (see architecture/EVENT_SYSTEM.md). It never blocks, so it polls the
- render_mailbox's dirty flag every iteration rather than being woken.
-*/
-void render_task() {
-    const uint LED_PIN = 1;
-    gpio_init(LED_PIN);
-    gpio_set_dir(LED_PIN, GPIO_OUT);
-
-    display.init();
-
-    for(;;) {
-        gpio_put(LED_PIN, true);
-
-        Label label;
-        if (render_mailbox.take_if_dirty(0, label)) {
-            display.apply_label(label);
-        }
-        display.task(); // This will trigger the LVGL flush callback, which updates the display with the current draw buffer content
-
-        busy_wait_ms(1);
-        gpio_put(LED_PIN, false);
-    }
+// multicore_launch_core1 takes a context-free void(*)(), so this trampoline
+// is the only thing that can't move into render_engine.h - the actual loop
+// (run_render_loop) and per-display logic (RenderEngine::update) both live
+// there. Reuses display_delay (stateless) rather than declaring a second
+// PicoDelay purely for this loop's per-iteration delay.
+[[noreturn]] void render_task() {
+    run_render_loop(render_engine, display_delay);
 }
 
 TaskHandle_t blink_task_handle = nullptr;
