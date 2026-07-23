@@ -18,10 +18,20 @@
     exist - see ensure_lvgl_globals_initialized(). That guard only works
     correctly if every physical display instantiates the *same* Display<DriverT>
     type (same DriverT), which is the expected setup (identical panels).
+
+    Must be given static storage duration - construct only as a `static`
+    object in the glue layer (main.cpp), same as every other HAL/Service
+    object in this codebase. operator new is deleted below to block heap
+    use, matching the project's no-heap rule; there's no equivalent
+    compile-time guard against stack use, so this is enforced by convention
+    and code review, not the type system.
 */
 template<DisplayDriver DriverT>
 class Display {
 public:
+    void* operator new(size_t) = delete;
+    void* operator new[](size_t) = delete;
+
     explicit Display(DriverT& driver) : m_driver(driver) {}
 
     void init() {

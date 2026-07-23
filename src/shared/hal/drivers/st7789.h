@@ -21,10 +21,20 @@
     bookkeeping happens, so both the blocking waits used internally (before
     issuing a new command) and an external caller polling for "is my last
     flush done yet" share one source of truth.
+
+    Must be given static storage duration - construct only as a `static`
+    object in the glue layer (main.cpp), same as every other HAL/Service
+    object in this codebase. operator new is deleted below to block heap
+    use, matching the project's no-heap rule; there's no equivalent
+    compile-time guard against stack use, so this is enforced by convention
+    and code review, not the type system.
 */
 template<SpiBus SpiT, GpioOutputPin CsPinT, GpioOutputPin DcPinT, GpioOutputPin RstPinT, Delay DelayT>
 class ST7789 {
 public:
+    void* operator new(size_t) = delete;
+    void* operator new[](size_t) = delete;
+
     ST7789(SpiT& spi, CsPinT& cs, DcPinT& dc, RstPinT& rst, DelayT& delay,
            uint16_t y_offset = 82, uint16_t x_offset = 18)
         : m_spi(spi), m_cs(cs), m_dc(dc), m_rst(rst), m_delay(delay),
