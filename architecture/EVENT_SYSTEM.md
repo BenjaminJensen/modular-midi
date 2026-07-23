@@ -68,36 +68,54 @@ per-type codec.
 ### Per-type codecs
 
 Each `EventType` gets a small, free-standing encode/decode pair — not a member of `Event` itself,
-so `event_common.h` doesn't need to know about every event type that will ever exist. Two
-mechanisms are both acceptable, chosen per field granularity:
+so `event_common.h` doesn't need to know about every event type that will ever exist. In practice
+both fields implemented so far are byte-aligned, and `ButtonPayload` below settled on explicit
+shift/mask constants (the same style `Event::type()`/`payload()` already use) rather than a
+`std::bit_cast`-based struct — simpler once every field just happens to be a whole byte, and it
+sidesteps `std::bit_cast`'s requirement that the source and destination be the same size (the
+payload being cast from is a 24-bit-meaningful `uint32_t`, not a byte-for-byte match for a 3-byte
+struct). A `bit_cast`-based struct remains an option for a future event type if its fields turn out
+not to need shift/mask logic anyway; bitfield structs are deliberately avoided regardless of
+mechanism — cross-compiler bitfield layout is implementation-defined, and this project only needs
+to target GCC/Clang on ARM EABI in practice, but explicit masks remove the question entirely rather
+than relying on that happening to be consistent.
 
-- **Byte-aligned fields** (a button ID, a button state enum, a program-slot index): a small
-  struct, `static_assert(sizeof(T) == 3)` (it has to fit the 24-bit payload, not the full 4 bytes
-  — the top byte is already spoken for by `type()`), converted to/from the payload bits with
-  `std::bit_cast`-style helpers. Compiler-checked size, no hand-computed shifts.
-- **Sub-byte fields** (MIDI's 4-bit status nibble + 4-bit channel nibble sharing a byte): explicit
-  mask/shift constants, the same style `Event::type()`/`payload()` already use. Bitfield structs
-  are deliberately avoided here — cross-compiler bitfield layout is implementation-defined, and
-  this project only needs to target GCC/Clang on ARM EABI in practice, but explicit masks remove
-  the question entirely rather than relying on that happening to be consistent.
-
-Example shapes (illustrative — finalize when each producer is actually built):
+**Button (implemented)** — `src/shared/services/button_payload.h`. Three byte-aligned fields
+within the 24-bit payload (`id`, `state`, a currently-unused `reserved` byte), as a small struct
+rather than a namespace of free functions — `pack()`/`unpack()` are static members instead of the
+`encode()`/`id()`/`state()` free-function sketch this section originally had:
 
 ```cpp
-// Button: id (8 bits) + state (8 bits), byte-aligned within the 24-bit payload
-namespace button_event {
-    enum class State : uint8_t { Pressed, Released, LongPressed, DoubleTapped };
-    constexpr Event encode(uint8_t id, State state) {
-        return Event{(static_cast<uint32_t>(EventType::Button) << 24)
-                    | (static_cast<uint32_t>(id) << 8)
-                    | static_cast<uint32_t>(state)};
-    }
-    constexpr uint8_t id(Event e)   { return static_cast<uint8_t>((e.payload() >> 8) & 0xFF); }
-    constexpr State state(Event e)  { return static_cast<State>(e.payload() & 0xFF); }
-}
+enum class ButtonEventState : uint8_t { Pressed, Released, LongPressed, DoubleTapped };
 
-// MIDI: status nibble + channel nibble + 2 data bytes — every MIDI channel message minus
-// sysex fits this shape (Note On/Off, CC, Program Change, Pitch Bend, etc.)
+struct ButtonPayload {
+    uint8_t id;
+    ButtonEventState state;
+    uint8_t reserved;
+
+    static constexpr ButtonPayload unpack(uint32_t payload) {
+        return {
+            static_cast<uint8_t>(payload >> 16),
+            static_cast<ButtonEventState>((payload >> 8) & 0xFF),
+            static_cast<uint8_t>(payload & 0xFF)
+        };
+    }
+    static constexpr Event pack(uint8_t id, ButtonEventState state) {
+        uint32_t data = (static_cast<uint32_t>(id) << 16) | (static_cast<uint32_t>(state) << 8);
+        return { (static_cast<uint32_t>(EventType::Button) << 24) | data };
+    }
+};
+```
+
+Also has `to_string(ButtonEventState)`, matching the wording `Button` itself already logs (e.g.
+"pressed", "long press"), so a button's own debug lines and any consumer's event-driven log lines
+read consistently.
+
+**MIDI (illustrative — not yet built)**: status nibble + channel nibble + 2 data bytes — every
+MIDI channel message minus sysex fits this shape (Note On/Off, CC, Program Change, Pitch Bend,
+etc.). Not implemented until a MIDI-receiving producer actually exists:
+
+```cpp
 namespace midi_event {
     constexpr Event encode(uint8_t status_nibble, uint8_t channel, uint8_t data1, uint8_t data2) {
         return Event{(static_cast<uint32_t>(EventType::Midi) << 24)
@@ -109,20 +127,20 @@ namespace midi_event {
 }
 ```
 
-`event_engine.h` and every consumer only ever see `Event` (a `uint32_t`); the per-type namespaces
-above are the only place that knows how to pack or unpack one.
+Every producer/consumer only ever sees `Event` (a `uint32_t`) on the wire — `ButtonPayload` (and
+whatever MIDI's eventual equivalent is) are the only places that know how to pack or unpack one.
 
 ## 3. Concept Vocabulary
 
 | Concept | Status | Concept file | rp2350 implementation | Host test double |
 |---|---|---|---|---|
-| `EventQueue<T, N>` | Target design, not implemented | `src/shared/event/event_queue_concept.h` (proposed) | FreeRTOS static queue (`xQueueCreateStatic`) | fake ring buffer, mirrors `FakeTaskRunner` |
+| `EventQueue<T, N>` | **Implemented** | `src/shared/event/event_queue_concept.h` | `src/shared/hal/rp2350/freertos_event_queue.h` (`FreeRTOSEventQueue<Capacity>`, `Event` fixed as the element type rather than a second template param) | `tests/mocks/fake_event_queue.h` (`FakeEventQueue`, an unbounded `std::vector`-backed FIFO rather than literally a ring buffer, but fulfills the same concept) |
 | `EventRouter<Bindings...>` | Target design, not implemented | `src/shared/event/event_router.h` (proposed) | header-only, no concrete/host split needed — it's pure compile-time fan-out logic | tested directly on host (no RTOS dependency) |
 
 `EventQueue<T, N>` was already flagged in `architecture/SERVICES.md` (there as `Queue<T, N>`,
 renamed here to leave room for other queue shapes elsewhere in the system) as the target-design
-primitive `event_engine.h` would need; this document is that "once that lands" moment. Its shape
-mirrors `TaskRunner`: minimal, blocking-with-timeout, no dynamic allocation.
+primitive this document's routing would need. Its shape mirrors `TaskRunner`: minimal,
+blocking-with-timeout, no dynamic allocation.
 
 ```cpp
 template<typename Q, typename T>
@@ -204,33 +222,56 @@ about "latest value wins" (e.g. a rapidly-updating continuous value) — nothing
 prevents a specific consumer from choosing a different local policy, since `send()`'s
 full/not-full outcome is visible at the call site.
 
-## 5. Worked Example (glue layer, illustrative)
+## 5. Worked Example
+
+`ButtonService`/`SystemService` are the reference producer/consumer pair, the way `pin_concept.h`/
+`Pin`/`Button` is HAL.md's and `TaskRunner`/`ButtonService` is SERVICES.md's. There's no
+`EventRouter` yet (only one consumer exists so far), so `main.cpp` wires both services directly to
+the same queue instance — this direct-sharing is exactly the seam `EventRouter` will slot into once
+a second consumer needs the same event stream:
 
 ```cpp
 // main.cpp — compile-time wiring, no runtime subscribe() calls
-static FreeRTOSEventQueue<Event, 8>  display_inbox;
-static FreeRTOSEventQueue<Event, 8>  midi_inbox;
+static FreeRTOSEventQueue<8> button_events;
 
-static Binding<EventType::Button, FreeRTOSEventQueue<Event, 8>> button_to_display{display_inbox};
-static Binding<EventType::Midi,   FreeRTOSEventQueue<Event, 8>> midi_to_display{display_inbox};
-static Binding<EventType::UI,     FreeRTOSEventQueue<Event, 8>> ui_to_midi{midi_inbox};
+static FreeRTOSTaskRunner<512> button_runner("ButtonService", 1);
+static ButtonService<Pin, RttSink, FreeRTOSTaskRunner<512>, FreeRTOSEventQueue<8>>
+    button_service(button_runner, button_events);
 
-static EventRouter router(button_to_display, midi_to_display, ui_to_midi);
-
-// ButtonService is constructed with a reference to `router` and calls
-// router.publish(button_event::encode(id, state)) instead of logging directly.
+static FreeRTOSTaskRunner<512> system_runner("SystemService", 1);
+static SystemService<RttSink, FreeRTOSTaskRunner<512>, FreeRTOSEventQueue<8>>
+    system_service(g_log, system_runner, button_events);
 ```
+
+- Producer: `src/shared/services/button_service.h` — `ButtonService::update()` calls each
+  `Button`'s `update()`, which returns a `ButtonTransition` bitmask (see `architecture/SERVICES.md`
+  for why `Button`'s API is edge-triggered rather than the level/latched state it started as), and
+  publishes one `ButtonPayload::pack(id, state)` `Event` per set bit via `m_queue.send(...)`.
+- Consumer: `src/shared/services/system_service.h` — `SystemService::run()` blocks on
+  `queue.receive(event, timeout)` (the notify mechanism described in §3) and currently just logs
+  `EventType::Button` events (`"event: button <id> <state>"`); other `EventType`s fall through a
+  no-op `default:` case, the natural place to grow as more producers exist.
+- Host test wrappers: `tests/shared/services/button_service_test.cpp`,
+  `tests/shared/services/system_service_test.cpp`, `tests/shared/services/button_payload_test.cpp`
+  — all real doctest coverage via `FakeEventQueue`, no RTOS involved.
+- Glue/injection: `src/projects/hub-master/main.cpp` (shown above).
+
+`ButtonService`'s `send()` calls don't check the returned `bool` yet (see §4's overflow policy) —
+there's no `Logger` injected into `ButtonService` to log a drop through, and with only one consumer
+today there's limited value in it. Revisit once `EventRouter` centralizes this.
 
 ## 6. Open Items
 
-- `EventQueue<T, N>` concept + rp2350/host implementations: not yet written.
-- `EventRouter`: not yet written; the shape above is a starting point, not a locked API.
-- Per-type codec namespaces (`button_event`, `midi_event`, a `program_loaded_event` for system
-  state changes) exist today only as the illustrative sketches in §2 — write them alongside the
-  Service that first needs them, same incremental approach as the rest of this codebase.
-- Following CLAUDE.md's TDD rule: `EventRouter` and the codec namespaces have no pico-sdk/FreeRTOS
-  dependency (`EventQueue` is a concept, satisfiable by a host fake same as `TaskRunner`), so they
-  belong in `tests/` with real doctest coverage from the start — don't let this become a
-  header-only file with no compiling TU, per `architecture/SERVICES.md` §2's rule.
-- Queue depth (`N`) is a per-consumer tuning parameter, not fixed here — size it to the burst
-  behavior of whatever's producing into it once real producers exist.
+- `EventRouter`: not yet written; the shape in §3 is a starting point, not a locked API. Still
+  only one consumer (`SystemService`) exists, so there's nothing to fan out to yet — build this
+  when a second consumer needs the same event stream.
+- Per-type codecs: `ButtonPayload` (§2) is real and in use. `midi_event` and a
+  `program_loaded_event` for system state changes are still illustrative-only sketches — write them
+  alongside the Service that first needs them, same incremental approach as the rest of this
+  codebase.
+- Drop-and-log overflow handling (§4) isn't wired up anywhere yet — `FreeRTOSEventQueue::send()`
+  already implements the *drop* half (non-blocking `xQueueSend`), but nothing logs it. Natural to
+  land together with `EventRouter`, whose `dispatch()` is where §4 always intended that log line to
+  live.
+- Queue depth (`N`) is a per-consumer tuning parameter, not fixed here — `main.cpp` currently uses
+  8 for `button_events`; revisit once real button-press burst behavior is observed on target.
