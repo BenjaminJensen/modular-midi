@@ -78,3 +78,16 @@ target_include_directories(system_service_tests PRIVATE
 )
 
 add_test(NAME system_service_tests COMMAND system_service_tests)
+
+add_executable(st7789_tests
+    shared/hal/drivers/st7789_test.cpp
+)
+
+target_include_directories(st7789_tests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/shared
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/libs/doctest
+    ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+add_test(NAME st7789_tests COMMAND st7789_tests)

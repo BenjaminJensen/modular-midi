@@ -2,17 +2,29 @@
 #include "pico/multicore.h"
 #include "FreeRTOS.h"
 #include "task.h"
+#include <array>
 #include <cstdio>
 #include "logger_instance.h"
 #include "display.h"
+#include "st7789.h"
+#include "spi_dma_bus.h"
+#include "output_pin.h"
+#include "pico_delay.h"
 #include "shared/services/button_service.h"
 #include "shared/services/system_service.h"
 #include "shared/hal/rp2350/pin.h"
 #include "shared/hal/rp2350/freertos_task_runner.h"
 #include "shared/hal/rp2350/freertos_event_queue.h"
-// Statically instantiate the display using the default pins defined in the header
 
-static Display display;
+// Display hw: SPI1 + CS/DC/RST pins matching the panel's wiring on this board.
+static SpiDmaBus display_spi(spi1, 10, 11, 10 * 1000 * 1000);
+static OutputPin display_cs(9);
+static OutputPin display_dc(8);
+static OutputPin display_rst(12);
+static PicoDelay display_delay;
+static ST7789<SpiDmaBus, OutputPin, OutputPin, OutputPin, PicoDelay> st7789(
+    display_spi, display_cs, display_dc, display_rst, display_delay);
+static Display<ST7789<SpiDmaBus, OutputPin, OutputPin, OutputPin, PicoDelay>> display(st7789);
 static FreeRTOSTaskRunner<512> button_runner("ButtonService", 1);
 static FreeRTOSEventQueue<8> button_events;
 static ButtonService<Pin, RttSink, FreeRTOSTaskRunner<512>, FreeRTOSEventQueue<8>> button_service(button_runner, button_events);
@@ -31,18 +43,18 @@ void blink_task(void *pvParameters) {
     for(;;) {
         g_log.debug() << "Blink task";
         // printf("Blinking LED\n");
-        gpio_put(LED_PIN, 1);
+        gpio_put(LED_PIN, true);
         vTaskDelay(pdMS_TO_TICKS(500));
-        gpio_put(LED_PIN, 0);
+        gpio_put(LED_PIN, false);
         vTaskDelay(pdMS_TO_TICKS(500));
     }
 }
 
 /*
- This is a non FreeRTOS task that will run on Core 1. 
+ This is a non FreeRTOS task that will run on Core 1.
  It will be used for updating the display and drawing on screen.
 */
-void display_task(void) {
+void display_task() {
     const uint LED_PIN = 1;
     gpio_init(LED_PIN);
     gpio_set_dir(LED_PIN, GPIO_OUT);
@@ -53,20 +65,20 @@ void display_task(void) {
         
         //Logger::log("Display task\n");
   //      busy_wait_ms(5);
-        gpio_put(LED_PIN, 1);
+        gpio_put(LED_PIN, true);
 //        busy_wait_ms(5);
         //display.clear_screen(color); // Clear to red for testing
-        display.task(); // This will trigger the LVGL flush callback, which updates the display with the current draw buffer content    
-        
+        display.task(); // This will trigger the LVGL flush callback, which updates the display with the current draw buffer content
+
         busy_wait_ms(1);
-        gpio_put(LED_PIN, 0);    
+        gpio_put(LED_PIN, false);
     }
 }
 
-TaskHandle_t blink_task_handle = NULL;
+TaskHandle_t blink_task_handle = nullptr;
 // 1. Define the buffers
 StaticTask_t xTaskBuffer;
-StackType_t xStack[configMINIMAL_STACK_SIZE];
+std::array<StackType_t, configMINIMAL_STACK_SIZE> xStack;
 
 int main() {
 
@@ -93,9 +105,9 @@ int main() {
         blink_task,           // Function pointer
         "BlinkTask",      // Name
         configMINIMAL_STACK_SIZE,     // Stack depth (in words, not bytes!)
-        NULL,              // Parameters
+        nullptr,           // Parameters
         1,                 // Priority
-        xStack,            // Pointer to the stack array
+        xStack.data(),     // Pointer to the stack array
         &xTaskBuffer       // Pointer to the TCB buffer
     );
     
@@ -109,6 +121,6 @@ int main() {
     multicore_launch_core1(display_task);
 
     vTaskStartScheduler();
-    
-    while(1); 
+
+    while(true);
 }
