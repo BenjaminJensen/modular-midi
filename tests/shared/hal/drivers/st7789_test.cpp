@@ -10,6 +10,16 @@
 
 namespace {
     using Driver = ST7789<FakeSpiBus, FakeOutputPin, FakeOutputPin, FakeOutputPin, FakeDelay>;
+
+    // operator new being deleted is a compile-time property - a runtime CHECK can't
+    // observe it, so this asserts on it directly via a requires-expression instead.
+    // Guards against a future refactor silently dropping the `= delete`.
+    template<typename T>
+    concept HeapConstructible = requires(FakeSpiBus& spi, FakeOutputPin& pin, FakeDelay& delay) {
+        new T(spi, pin, pin, pin, delay);
+    };
+    static_assert(!HeapConstructible<Driver>,
+                  "ST7789 must stay non-heap-constructible (operator new is deleted for the no-heap-anywhere rule)");
 }
 
 TEST_CASE("update() starts exactly one DMA write with the given data and length") {
