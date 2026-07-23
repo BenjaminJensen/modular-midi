@@ -44,12 +44,13 @@ of the linting setup (see CLAUDE.md's Linting section).
 | Concept | Status | Concept file | rp2350 implementation | Host test double |
 |---|---|---|---|---|
 | `TaskRunner` | **Implemented** | `src/shared/hal/task_runner_concept.h` | `src/shared/hal/rp2350/freertos_task_runner.h` | `tests/mocks/fake_task_runner.h` |
-| `EventQueue<T, N>` | Target design, not implemented — see `architecture/EVENT_SYSTEM.md` | — | — | — |
+| `EventQueue<T, N>` | **Implemented** — see `architecture/EVENT_SYSTEM.md` | `src/shared/event/event_queue_concept.h` | `src/shared/hal/rp2350/freertos_event_queue.h` | `tests/mocks/fake_event_queue.h` |
 | `SpinLock` / `SpinLockGuard` | Target design, not implemented | — | — | — |
 | `Mutex` | Target design, not implemented | — | — | — |
 
-Only `TaskRunner` has a real consumer today (`ButtonService`); the rest are documented so the next
-Service that needs them follows the same shape, not a one-off. This mirrors how HAL.md documents an
+`TaskRunner` and `EventQueue` both have real consumers today (`ButtonService`, and
+`ButtonService`/`SystemService` respectively); `SpinLock`/`Mutex` are documented so the next Service
+that needs them follows the same shape, not a one-off. This mirrors how HAL.md documents an
 `spi_concept` that isn't implemented yet — write down the target, build it when something needs it.
 
 ### `TaskRunner` (implemented)
@@ -88,14 +89,16 @@ loop and would hang a test. This is enough to unit-test a Service's `update()`/`
 logic directly, and to assert `start()` wires the right entry point/context through, entirely on
 the host, with real doctest coverage and real clang-tidy coverage via the wrapper TU.
 
-### `EventQueue<T, N>` (target design, not implemented)
+### `EventQueue<T, N>` (implemented)
 
 A fixed-capacity, statically-allocated typed queue, exposed as native modern C++ (no `QueueHandle_t`
 or `xQueueReceive` in the calling code) rather than a thin FreeRTOS wrapper — so, like `TaskRunner`,
 it can be backed by something other than FreeRTOS on the host. Named `EventQueue` rather than the
 generic `Queue` to leave room for other queue shapes the system may need later that aren't part of
-the event system. Intended first consumer: `src/shared/event/event_engine.h`'s dispatch/routing —
-see `architecture/EVENT_SYSTEM.md` for the full design.
+the event system. First consumers: `ButtonService` (producer, publishes into it) and
+`SystemService` (consumer, `receive()`s from it) — see `architecture/EVENT_SYSTEM.md` for the full
+design, including the still-not-implemented `EventRouter` that will eventually sit between
+multiple producers and consumers instead of the direct queue-sharing `main.cpp` does today.
 
 ### `SpinLock` / `SpinLockGuard` and `Mutex` (target design, not implemented)
 
