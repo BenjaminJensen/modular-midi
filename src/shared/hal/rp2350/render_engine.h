@@ -3,6 +3,7 @@
 #include <cstdint>
 #include "shared/hal/delay_concept.h"
 #include "shared/hal/display_driver_concept.h"
+#include "shared/hal/log_sink_concept.h"
 #include "shared/hal/rp2350/display.h"
 #include "shared/render/mailbox.h"
 
@@ -18,10 +19,10 @@
     be given static storage duration, same as every other HAL/Service
     object in this codebase (see main.cpp).
 */
-template<DisplayDriver DriverT, uint8_t DisplayCount>
+template<DisplayDriver DriverT, LogSink SinkT, uint8_t DisplayCount>
 class RenderEngine {
 public:
-    RenderEngine(Display<DriverT>& display, Mailbox<DisplayCount>& mailbox, uint8_t display_id)
+    RenderEngine(Display<DriverT, SinkT>& display, Mailbox<DisplayCount>& mailbox, uint8_t display_id)
         : m_display(display), m_mailbox(mailbox), m_display_id(display_id) {}
 
     void init() {
@@ -30,6 +31,9 @@ public:
 
     // One iteration's worth of work: apply this display's pending Mailbox
     // entry if it's dirty, then drive LVGL's timer/flush handling regardless.
+    // Safe to apply a label unconditionally here (no "is a redraw in
+    // progress" check needed) because Display::task()/flush() never returns
+    // with a redraw left mid-flight - see Display::flush()'s comment.
     // Call this from a tight loop (see run_render_loop below).
     void update() {
         Label label;
@@ -40,7 +44,7 @@ public:
     }
 
 private:
-    Display<DriverT>& m_display;
+    Display<DriverT, SinkT>& m_display;
     Mailbox<DisplayCount>& m_mailbox;
     uint8_t m_display_id;
 };
@@ -53,8 +57,8 @@ private:
 // main.cpp, same pattern ST7789 already uses. Extracted here (rather than
 // main.cpp) so the only thing left in main.cpp is the one-line trampoline
 // multicore_launch_core1's context-free function pointer requires.
-template<DisplayDriver DriverT, uint8_t DisplayCount, Delay DelayT>
-[[noreturn]] void run_render_loop(RenderEngine<DriverT, DisplayCount>& engine, DelayT& delay) {
+template<DisplayDriver DriverT, LogSink SinkT, uint8_t DisplayCount, Delay DelayT>
+[[noreturn]] void run_render_loop(RenderEngine<DriverT, SinkT, DisplayCount>& engine, DelayT& delay) {
     engine.init();
 
     for (;;) {

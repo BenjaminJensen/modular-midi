@@ -16,6 +16,18 @@ constexpr const char* to_string(ButtonEventState state) {
     return "unknown";
 }
 
+// Enum-member-name wording (as opposed to to_string()'s log-line wording above),
+// for consumers that want the state rendered verbatim, e.g. a display label.
+constexpr const char* to_label_string(ButtonEventState state) {
+    switch (state) {
+        case ButtonEventState::Pressed:      return "Pressed";
+        case ButtonEventState::Released:     return "Released";
+        case ButtonEventState::LongPressed:  return "LongPressed";
+        case ButtonEventState::DoubleTapped: return "DoubleTapped";
+    }
+    return "Unknown";
+}
+
 struct ButtonPayload {
     uint8_t id;
     ButtonEventState state;
