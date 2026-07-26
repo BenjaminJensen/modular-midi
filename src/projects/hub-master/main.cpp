@@ -7,7 +7,7 @@
 #include "logger_instance.h"
 #include "display.h"
 #include "st7789.h"
-#include "spi_dma_bus.h"
+#include "pio_spi_bus.h"
 #include "output_pin.h"
 #include "pico_delay.h"
 #include "shared/services/button_service.h"
@@ -18,22 +18,24 @@
 #include "shared/hal/rp2350/render_engine.h"
 #include "shared/render/mailbox.h"
 
-// Display hw: SPI1 + CS/DC/RST pins matching the panel's wiring on this board.
-static SpiDmaBus display_spi(spi1, 10, 11, 10 * 1000 * 1000);
+// Display hw: PIO0 SM0 (SDA/SCL) + CS/DC/RST pins matching the panel's wiring
+// on this board - same pins the SPI1-based SpiDmaBus used to drive
+// (see architecture/RP2350 Quad-Display Concurrent Architecture.md).
+static PioSpiBus display_spi(pio0, 0, 11, 10, 10 * 1000 * 1000);
 static OutputPin display_cs(9);
 static OutputPin display_dc(8);
 static OutputPin display_rst(12);
 static PicoDelay display_delay;
-static ST7789<SpiDmaBus, OutputPin, OutputPin, OutputPin, PicoDelay> st7789(
+static ST7789<PioSpiBus, OutputPin, OutputPin, OutputPin, PicoDelay> st7789(
     display_spi, display_cs, display_dc, display_rst, display_delay);
-static Display<ST7789<SpiDmaBus, OutputPin, OutputPin, OutputPin, PicoDelay>, RttSink> display(st7789, g_log);
+static Display<ST7789<PioSpiBus, OutputPin, OutputPin, OutputPin, PicoDelay>, RttSink> display(st7789, g_log);
 
 // Cross-core Mailbox for Render Engine label updates (see architecture/EVENT_SYSTEM.md,
 // docs/adr/0001). Sized for the full 4-display hardware spec even though only display 0
 // is wired up below - display_ids 1-3 simply stay untouched until those displays exist.
 static constexpr uint8_t NUM_DISPLAYS = 4;
 static Mailbox<NUM_DISPLAYS> render_mailbox;
-static RenderEngine<ST7789<SpiDmaBus, OutputPin, OutputPin, OutputPin, PicoDelay>, RttSink, NUM_DISPLAYS>
+static RenderEngine<ST7789<PioSpiBus, OutputPin, OutputPin, OutputPin, PicoDelay>, RttSink, NUM_DISPLAYS>
     render_engine(display, render_mailbox, 0);
 
 static FreeRTOSTaskRunner<512> button_runner("ButtonService", 1);

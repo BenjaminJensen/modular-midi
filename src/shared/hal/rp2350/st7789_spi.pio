@@ -1,0 +1,38 @@
+;
+; "Dumb serializer" for the ST7789 SPI transport (see
+; architecture/RP2350 Quad-Display Concurrent Architect.md, sections 0/3/4).
+; Doesn't know or care whether it's shifting a command byte or pixel data -
+; the CPU (write_blocking) and DMA (write_dma) paths both just push bytes
+; into the same TX FIFO, 8 bits at a time (autopull, threshold=8).
+;
+.program st7789_8bit
+.side_set 1 opt                ; SCL is the side-set pin
+
+public entry_point:
+    out pins, 1    side 0 [1]  ; shift 1 bit to SDA, set SCL low, wait 1 cycle
+    jmp entry_point side 1 [1] ; set SCL high, wait 1 cycle, loop back
+
+% c-sdk {
+// Per-SM init: identical program, per-SM pin config (architecture doc §3).
+// clkdiv is supplied by the caller (PioSpiBus) rather than computed here -
+// clock-rate business logic belongs with the bus, not the PIO glue.
+// sm/offset/sda_pin/scl_pin are peripheral identity params per HAL.md, not
+// logically interchangeable despite the shared type.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
+static inline void st7789_8bit_program_init(PIO pio, uint sm, uint offset, uint sda_pin, uint scl_pin, float clkdiv) {
+    pio_gpio_init(pio, sda_pin);
+    pio_gpio_init(pio, scl_pin);
+    pio_sm_set_consecutive_pindirs(pio, sm, sda_pin, 1, true);
+    pio_sm_set_consecutive_pindirs(pio, sm, scl_pin, 1, true);
+
+    pio_sm_config c = st7789_8bit_program_get_default_config(offset);
+    sm_config_set_out_pins(&c, sda_pin, 1);
+    sm_config_set_sideset_pins(&c, scl_pin);
+    sm_config_set_out_shift(&c, false, true, 8); // shift left (MSB first), autopull, 8-bit threshold
+    sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_TX);
+    sm_config_set_clkdiv(&c, clkdiv);
+
+    pio_sm_init(pio, sm, offset, &c);
+    pio_sm_set_enabled(pio, sm, true);
+}
+%}
