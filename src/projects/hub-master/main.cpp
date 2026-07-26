@@ -26,14 +26,14 @@ static OutputPin display_rst(12);
 static PicoDelay display_delay;
 static ST7789<SpiDmaBus, OutputPin, OutputPin, OutputPin, PicoDelay> st7789(
     display_spi, display_cs, display_dc, display_rst, display_delay);
-static Display<ST7789<SpiDmaBus, OutputPin, OutputPin, OutputPin, PicoDelay>> display(st7789);
+static Display<ST7789<SpiDmaBus, OutputPin, OutputPin, OutputPin, PicoDelay>, RttSink> display(st7789, g_log);
 
 // Cross-core Mailbox for Render Engine label updates (see architecture/EVENT_SYSTEM.md,
 // docs/adr/0001). Sized for the full 4-display hardware spec even though only display 0
 // is wired up below - display_ids 1-3 simply stay untouched until those displays exist.
 static constexpr uint8_t NUM_DISPLAYS = 4;
 static Mailbox<NUM_DISPLAYS> render_mailbox;
-static RenderEngine<ST7789<SpiDmaBus, OutputPin, OutputPin, OutputPin, PicoDelay>, NUM_DISPLAYS>
+static RenderEngine<ST7789<SpiDmaBus, OutputPin, OutputPin, OutputPin, PicoDelay>, RttSink, NUM_DISPLAYS>
     render_engine(display, render_mailbox, 0);
 
 static FreeRTOSTaskRunner<512> button_runner("ButtonService", 1);
@@ -41,7 +41,8 @@ static FreeRTOSEventQueue<8> button_events;
 static ButtonService<Pin, RttSink, FreeRTOSTaskRunner<512>, FreeRTOSEventQueue<8>> button_service(button_runner, button_events);
 
 static FreeRTOSTaskRunner<512> system_runner("SystemService", 1);
-static SystemService<RttSink, FreeRTOSTaskRunner<512>, FreeRTOSEventQueue<8>> system_service(g_log, system_runner, button_events);
+static SystemService<RttSink, FreeRTOSTaskRunner<512>, FreeRTOSEventQueue<8>, NUM_DISPLAYS> system_service(
+    g_log, system_runner, button_events, render_mailbox);
 
 static Pin button_pin(28); // Example pin number
 static Button<Pin, RttSink> button(0, &button_pin, g_log, 500); // 500ms long press threshold
@@ -94,11 +95,6 @@ int main() {
     g_log.debug() << "System starting up...";
     g_log.debug() << "Running on Core: " << get_core_num();
     g_log.debug() << "String test: " << "Hello World!";
-
-    // TEMPORARY: seeds render_mailbox with a test Label to verify the Render Engine
-    // pipeline (Mailbox -> render_task -> Display::apply_label -> LVGL -> pixels)
-    // end-to-end on target. Remove once RenderService writes real labels.
-    render_mailbox.write(0, Label::make("Hello", ColorPalette::Active, FontSize::Small));
 
     // Create the task and pin it strictly to Core 0
     blink_task_handle = xTaskCreateStatic(

@@ -41,3 +41,10 @@ TEST_CASE("to_string() matches Button's own log wording") {
     CHECK(std::string_view(to_string(ButtonEventState::LongPressed)) == "long press");
     CHECK(std::string_view(to_string(ButtonEventState::DoubleTapped)) == "double tap");
 }
+
+TEST_CASE("to_label_string() renders the enum member name verbatim") {
+    CHECK(std::string_view(to_label_string(ButtonEventState::Pressed)) == "Pressed");
+    CHECK(std::string_view(to_label_string(ButtonEventState::Released)) == "Released");
+    CHECK(std::string_view(to_label_string(ButtonEventState::LongPressed)) == "LongPressed");
+    CHECK(std::string_view(to_label_string(ButtonEventState::DoubleTapped)) == "DoubleTapped");
+}
