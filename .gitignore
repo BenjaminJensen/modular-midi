@@ -15,6 +15,10 @@ obj/
 /tools/picotool/picotool-src/
 __pycache__/
 
+# MCP server venv/build metadata
+mcp/.venv/
+mcp/*.egg-info/
+
 # VS Code / IDE settings
 #.vscode/
 .cmake/

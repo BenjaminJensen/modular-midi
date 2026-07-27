@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "modular-midi-build": {
+      "command": "mcp/.venv/bin/python",
+      "args": ["mcp/server.py"]
+    }
+  }
+}
