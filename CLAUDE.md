@@ -6,6 +6,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 `modular-midi` is a multi-project embedded firmware repo. The first product, `hub-master`, is an RP2350-based MIDI controller with 4 buttons and 4 displays (one display shows live info for its corresponding button). Future hardware projects will live alongside it and share common infrastructure.
 
+## Agent workflow: build/test/lint via MCP
+
+This repo ships an MCP server (`mcp/`) exposing three tools — `build`, `test`, `lint_changed` — that wrap the Docker workflow documented in Build/Testing/Linting below. **When working in this repo as an agent with that server connected (check via `/mcp`), always call those MCP tools instead of running `build-docker.sh`/`build-docker.ps1`, `docker run ... ctest`, or `tools/lint_changed.py` directly through Bash.** The MCP tools already handle building the `modular-midi-build` Docker image on demand, invoking cmake/ctest/lint_changed.py with the right flags and build-dir names, and returning structured, pre-parsed results (error/warning lists, pass/fail counts, findings) instead of a raw log an agent would otherwise have to re-parse itself.
+
+The Build/Testing/Linting sections below are still the reference for *what* those tools do under the hood, and remain the primary documented path for humans and for the native Windows toolchain (`build.ps1`/`test.ps1`), which the MCP server doesn't cover — it only wraps the Docker path. Only fall back to the raw commands documented below if the MCP server isn't connected.
+
 ## Git workflow
 
 **Never commit directly to `main`.** All work happens on a topic branch. This is enforced by GitHub branch protection (see Continuous Integration below), not just convention: `main` only accepts changes via a PR with the `build-test-lint` check passing, and direct pushes are rejected even for the repo owner. Merge via GitHub's "Squash and merge" or "Rebase and merge" (plain merge commits are disabled — linear history is required); a bare local `git merge --ff-only && git push` to `main` no longer works, since any direct push to the protected branch is rejected regardless of whether it's a fast-forward. Before committing, confirm the current branch is not `main`.
@@ -39,6 +45,8 @@ A Docker image (`docker/Dockerfile`) mirrors this repo's full tool stack — ARM
 
 Builds the image if it doesn't exist yet, then runs the firmware build inside it with the repo bind-mounted (no source is baked into the image). Output goes to `build-docker/`, **not** `build/` — a Windows-native and a Linux-container CMake configure can't safely share one build directory (`CMakeCache.txt` bakes in absolute compiler paths and ABI). `build-docker.ps1` passes `-DCMAKE_BUILD_TYPE=Debug` explicitly so its output matches `build/`'s current actual behavior (see above) rather than pico-sdk's undeclared `Release` default.
 
+**Agents: use the MCP `build` tool for this instead of running the commands above directly** — see "Agent workflow" above.
+
 ## Linting
 
 [clang-tidy](https://clang.llvm.org/extra/clang-tidy/) is configured via `.clang-tidy` at the repo root, with a deliberately lean check set: `bugprone-*`, `modernize-*`, `performance-*` (minus `modernize-use-trailing-return-type`, a purely stylistic check, and minus `clang-analyzer-cplusplus.NewDeleteLeaks` — see below). `cppcoreguidelines-*` is intentionally **not** enabled yet — it's too opinionated for the pre-refactor HAL code (see HAL section below), which is a known rewrite target anyway; revisit once that refactor lands. `HeaderFilterRegex` scopes diagnostics to `src/shared` and `src/projects`, excluding vendored `src/libs/*`. Existing findings have not been fixed repo-wide — this is tooling setup, not a cleanup pass.
@@ -60,6 +68,8 @@ The script only takes a single file — a `.c`/`.cpp` translation unit, not a he
 
 To lint everything relevant to the current branch instead of one file at a time, `tools/changed_files.py [--base main] [--ext .cpp,.h]` lists changed files as the union of two git-native sources — every file touched by a commit on the branch since it diverged from `--base` (what CI sees: a clean checkout), and every file with an uncommitted change right now, staged or not, including untracked files (what a developer or agent mid-edit sees). Deleted files are dropped by checking the path still exists, not by interpreting git's status letters. This replaces the old `tools/lint-diff.sh` (`clang-tidy-diff.py` parsing a unified diff, which silently reported "clean" on a malformed or empty diff) with a plain file list, so whole files go through `tools/clang-tidy.py` rather than diff hunks. `tools/lint_changed.py [--base main]` composes both — gets the changed-file list, runs `tools/clang-tidy.py` on each, and aggregates the per-file JSON results into one payload (`files_checked`, a merged `findings` list, and `file_errors` for any file that failed to lint) — and is what backs the CI step below.
 
+**Agents: use the MCP `lint_changed` tool instead of invoking `tools/lint_changed.py` directly** — see "Agent workflow" above. (`tools/clang-tidy.py` for a single specific file has no MCP wrapper yet and is still fine to invoke directly.)
+
 ## Testing
 
 Hardware-independent logic (currently just `Button`) has host-side unit tests under `tests/`, built with a native compiler — **not** `arm-none-eabi-gcc` — since it's a separate CMake project from the firmware build (the root `CMakeLists.txt` unconditionally pulls in pico-sdk before `project()`, so it can't produce a host binary). Tests use [doctest](https://github.com/doctest/doctest), vendored as a single header at `src/libs/doctest/doctest.h` (pinned to v2.4.11, not a submodule).
@@ -77,6 +87,8 @@ ctest --test-dir build-tests --output-on-failure
 ```
 
 The same commands also run inside the container from the Build section above (`docker run --rm -v ${PWD}:/workspace -w /workspace modular-midi-build bash -c "cmake -G Ninja -S tests -B build-tests-docker -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ && cmake --build build-tests-docker && ctest --test-dir build-tests-docker --output-on-failure"`) — verified to pass identically. Still supplementary; MSYS2 stays primary for now.
+
+**Agents: use the MCP `test` tool for the container path instead of running the `docker run` command above directly** — see "Agent workflow" above.
 
 Only code with no pico-sdk/FreeRTOS dependency belongs in `tests/` — e.g. `Button` is deliberately kept hardware-free (see Services below) so it can be tested this way. `ButtonService` now qualifies too: it depends on FreeRTOS only through the injected `TaskRunner` concept (see `architecture/SERVICES.md`), so a host build satisfies that concept with a fake (`tests/mocks/fake_task_runner.h`) instead of the real RTOS. `ST7789` (`src/shared/hal/drivers/st7789.h`) qualifies the same way, one level down the stack: it depends on hardware only through the `SpiBus`/`GpioOutputPin`/`Delay` concepts, satisfied on the host by `tests/mocks/fake_spi_bus.h`/`fake_output_pin.h`/`fake_delay.h` (`tests/shared/hal/drivers/st7789_test.cpp`) instead of `SpiDmaBus`/`OutputPin`/`PicoDelay`. The concrete rp2350 implementations of these concepts — `Pin`, `OutputPin`, `SpiDmaBus`, `PicoDelay`, `FreeRTOSTaskRunner`, `RttSink` — still touch pico-sdk/FreeRTOS directly and are not host-testable; only the logic layered on top of them is.
 
