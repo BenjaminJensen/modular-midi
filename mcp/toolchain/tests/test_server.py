@@ -227,3 +227,47 @@ def test_lint_changed_reports_error_on_malformed_json(monkeypatch):
     assert result["error"] == "tools/lint_changed.py did not print valid JSON"
     assert result["exit_code"] == 1
     assert "not json" in result["log_tail"]
+
+
+# --- lint_file() -----------------------------------------------------------
+
+def test_lint_file_passes_through_valid_json(monkeypatch):
+    monkeypatch.setattr(server, "ensure_image", lambda: None)
+    payload = (
+        '{"summary": {"status": "issues_found", "total_errors": 0, "total_warnings": 1}, '
+        '"findings": [{"file": "src/shared/button.cpp", "line": 3, "column": 5, '
+        '"severity": "warning", "check": "modernize-use-nullptr", "message": "use nullptr"}]}'
+    )
+    monkeypatch.setattr(server, "run_in_container", lambda cmd: fake_proc(stdout=payload, returncode=1))
+
+    result = server.lint_file("src/shared/button.cpp")
+
+    assert result == {
+        "summary": {"status": "issues_found", "total_errors": 0, "total_warnings": 1},
+        "findings": [
+            {
+                "file": "src/shared/button.cpp",
+                "line": 3,
+                "column": 5,
+                "severity": "warning",
+                "check": "modernize-use-nullptr",
+                "message": "use nullptr",
+            }
+        ],
+    }
+
+
+def test_lint_file_reports_error_on_malformed_json(monkeypatch):
+    monkeypatch.setattr(server, "ensure_image", lambda: None)
+    monkeypatch.setattr(
+        server,
+        "run_in_container",
+        lambda cmd: fake_proc(stdout="not json", stderr="traceback...", returncode=1),
+    )
+
+    result = server.lint_file("src/shared/button.cpp")
+
+    assert result["summary"]["status"] == "error"
+    assert result["error"] == "tools/clang-tidy.py did not print valid JSON"
+    assert result["exit_code"] == 1
+    assert "not json" in result["log_tail"]
