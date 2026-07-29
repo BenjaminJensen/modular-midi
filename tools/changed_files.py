@@ -14,11 +14,13 @@ exists on disk -- cheaper and more robust than interpreting git's status
 letters (M/A/D/R/C) ourselves.
 
 Usage:
-    python3 tools/changed_files.py [--base main] [--ext .cpp,.h]
+    python3 tools/changed_files.py [--base main] [--ext .cpp,.h] [--exclude mcp/,other/prefix/]
 
 Prints a single JSON document to stdout: {"base_ref": ..., "files": [...]}.
 No filtering is applied by default -- pass --ext to scope to specific
-extensions (e.g. the source-file extensions clang-tidy.py can act on).
+extensions (e.g. the source-file extensions clang-tidy.py can act on), and
+--exclude to drop any changed file whose repo-relative path starts with one
+of the given prefixes.
 """
 from __future__ import annotations
 
@@ -115,25 +117,30 @@ def working_tree_paths() -> set[Path]:
     return paths
 
 
-def changed_files(base_ref: str, extensions: list[str] | None) -> list[str]:
+def changed_files(base_ref: str, extensions: list[str] | None, exclude_prefixes: list[str] | None = None) -> list[str]:
     all_paths = committed_diff_paths(base_ref) | working_tree_paths()
     existing = (p for p in all_paths if p.is_file())
     if extensions:
         existing = (p for p in existing if p.suffix in extensions)
-    return sorted(p.relative_to(REPO_ROOT).as_posix() for p in existing)
+    rel_paths = sorted(p.relative_to(REPO_ROOT).as_posix() for p in existing)
+    if exclude_prefixes:
+        rel_paths = [p for p in rel_paths if not any(p.startswith(prefix) for prefix in exclude_prefixes)]
+    return rel_paths
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--base", help="Base ref to diff committed history against (default: main, falling back to origin/main)")
     parser.add_argument("--ext", help="Comma-separated list of extensions to keep, e.g. .cpp,.h (default: no filtering)")
+    parser.add_argument("--exclude", help="Comma-separated repo-relative path prefixes to drop, e.g. mcp/ (default: no exclusion)")
     args = parser.parse_args()
 
     extensions = [e if e.startswith(".") else f".{e}" for e in args.ext.split(",")] if args.ext else None
+    exclude_prefixes = args.exclude.split(",") if args.exclude else None
 
     try:
         base_ref = resolve_base_ref(args.base)
-        files = changed_files(base_ref, extensions)
+        files = changed_files(base_ref, extensions, exclude_prefixes)
         payload = {"base_ref": base_ref, "files": files}
         exit_code = 0
     except ChangedFilesError as e:
