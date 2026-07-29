@@ -6,21 +6,22 @@ by build-docker.sh/.ps1 (see docker/Dockerfile) — there is no native ARM
 toolchain or MSYS2 available under WSL, so the container path is the only
 path, not an alternative to the *.ps1 scripts.
 
-Run with: python3 mcp/server.py  (stdio transport)
+Run with: python3 mcp/toolchain/server.py  (stdio transport)
 """
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import subprocess
 from pathlib import Path
 from typing import Any
 
-from mcp.server.fastmcp import FastMCP
+from fastmcp import FastMCP
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-IMAGE = "modular-midi-build"
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+IMAGE = os.environ.get("TOOLCHAIN_DOCKER_IMAGE", "modular-midi-build")
 
 DIAGNOSTIC_RE = re.compile(
     r"^(?P<file>[^\s:][^:]*):(?P<line>\d+):(?P<col>\d+):\s*"
@@ -34,7 +35,7 @@ CTEST_FAILED_LINE_RE = re.compile(r"^\s*\d+\s*-\s*(?P<name>\S+)\s*\((?P<why>\w+)
 
 LOG_TAIL_LINES = 200
 
-mcp = FastMCP("modular-midi-build")
+mcp = FastMCP("toolchain")
 
 
 def ensure_image() -> None:

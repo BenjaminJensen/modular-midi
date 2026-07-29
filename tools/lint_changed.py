@@ -28,6 +28,11 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s", str
 logger = logging.getLogger("lint-changed")
 
 DEFAULT_EXTENSIONS = [".c", ".cpp"]
+# mcp/ holds MCP server code (Python) and, under tests/fixtures/, small C++
+# fixtures deliberately compiled ad hoc (see mcp/toolchain/tests/) rather
+# than through build/build-tests -- they have no compile_commands.json
+# entry by design and would only ever show up here as spurious file_errors.
+DEFAULT_EXCLUDE_PREFIXES = ["mcp/"]
 
 
 class LintChangedError(Exception):
@@ -44,10 +49,12 @@ def run_json(cmd: list[str]) -> dict:
         raise LintChangedError(f"{cmd[1]} did not print valid JSON: {e}\nstdout: {proc.stdout}\nstderr: {proc.stderr}")
 
 
-def get_changed_files(base_ref: str | None, extensions: list[str]) -> list[str]:
+def get_changed_files(base_ref: str | None, extensions: list[str], exclude_prefixes: list[str]) -> list[str]:
     cmd = [sys.executable, str(CHANGED_FILES_SCRIPT), "--ext", ",".join(extensions)]
     if base_ref:
         cmd += ["--base", base_ref]
+    if exclude_prefixes:
+        cmd += ["--exclude", ",".join(exclude_prefixes)]
     payload = run_json(cmd)
     if "error" in payload:
         raise LintChangedError(f"tools/changed_files.py failed: {payload['error']}")
@@ -70,12 +77,17 @@ def main() -> None:
     parser.add_argument("--src-build-dir", default="build", help="Firmware build dir (default: build)")
     parser.add_argument("--tests-build-dir", default="build-tests", help="Host-test build dir (default: build-tests)")
     parser.add_argument("--ext", help="Comma-separated extensions to lint (default: .c,.cpp)")
+    parser.add_argument(
+        "--exclude",
+        help=f"Comma-separated repo-relative path prefixes to skip (default: {','.join(DEFAULT_EXCLUDE_PREFIXES)})",
+    )
     args = parser.parse_args()
 
     extensions = [e if e.startswith(".") else f".{e}" for e in args.ext.split(",")] if args.ext else DEFAULT_EXTENSIONS
+    exclude_prefixes = args.exclude.split(",") if args.exclude else DEFAULT_EXCLUDE_PREFIXES
 
     try:
-        files = get_changed_files(args.base, extensions)
+        files = get_changed_files(args.base, extensions, exclude_prefixes)
     except LintChangedError as e:
         logger.error(str(e))
         print(json.dumps({

@@ -15,9 +15,10 @@ obj/
 /tools/picotool/picotool-src/
 __pycache__/
 
-# MCP server venv/build metadata
-mcp/.venv/
-mcp/*.egg-info/
+# MCP server venv/build metadata (one per-server subdirectory under mcp/)
+mcp/*/.venv/
+mcp/*/*.egg-info/
+mcp/*/.pytest_cache/
 
 # VS Code / IDE settings
 #.vscode/

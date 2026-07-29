@@ -46,3 +46,27 @@ jobs:
         run: |
           docker run --rm -v ${{ github.workspace }}:/workspace -w /workspace modular-midi-ci:latest \
             python3 tools/lint_changed.py --base origin/main
+
+      - name: MCP toolchain server fixture integration tests
+        env:
+          TOOLCHAIN_DOCKER_IMAGE: modular-midi-ci:latest
+        run: |
+          pip install -e "mcp/toolchain[dev]"
+          pytest mcp/toolchain/tests -m integration
+
+  mcp-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - name: Install MCP toolchain server (dev)
+        run: pip install -e "mcp/toolchain[dev]"
+
+      - name: Run mocked unit tests
+        run: pytest mcp/toolchain/tests -m "not integration"
