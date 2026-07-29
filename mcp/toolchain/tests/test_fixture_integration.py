@@ -9,6 +9,7 @@ docker/Dockerfile.
 """
 from __future__ import annotations
 
+import json
 import shutil
 
 import pytest
@@ -75,3 +76,43 @@ def test_ctest_fixture_produces_real_parseable_summary_and_failure():
 
     failures = [m["name"] for m in server.CTEST_FAILED_LINE_RE.finditer(output)]
     assert failures == ["failing_test"]
+
+
+def test_clang_tidy_fixture_produces_real_parseable_finding():
+    # tools/clang-tidy.py itself does all the parsing lint_file() passes
+    # through unmodified, so this drives it directly (like build_warning.cpp/
+    # build_error.cpp drive the compiler directly) rather than through
+    # server.lint_file(), which hardcodes build-docker/build-tests-docker
+    # rather than a throwaway fixture build dir.
+    #
+    # cmake's own configure-step stdout is redirected to /dev/null so that
+    # proc.stdout below is exactly tools/clang-tidy.py's JSON output and
+    # nothing else -- both commands have to run in the same `docker run`
+    # invocation (chained with &&) since build_dir lives under /tmp, which
+    # isn't shared across separate --rm container runs.
+    server.ensure_image()
+    build_dir = "/tmp/toolchain_mcp_clang_tidy_fixture_build"
+    fixture_project = f"{FIXTURES_DIR}/clang_tidy_project"
+    fixture_file = f"{fixture_project}/nullptr_finding.cpp"
+
+    proc = server.run_in_container(
+        f"cmake -G Ninja -S {fixture_project} -B {build_dir} "
+        f"-DCMAKE_CXX_COMPILER=arm-none-eabi-g++ "
+        f'-DCMAKE_CXX_FLAGS="-mcpu=cortex-m33 -mthumb" '
+        f"-DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY > /dev/null && "
+        # --src-build-dir must precede the positional path: clang-tidy.py's
+        # trailing REMAINDER positional (passthrough clang-tidy args) would
+        # otherwise swallow a --src-build-dir that comes after the path.
+        f"python3 tools/clang-tidy.py --src-build-dir {build_dir} {fixture_file}"
+    )
+
+    payload = json.loads(proc.stdout)
+    assert payload["summary"]["status"] == "issues_found"
+
+    nullptr_findings = [f for f in payload["findings"] if f["check"] == "modernize-use-nullptr"]
+    assert len(nullptr_findings) == 1
+    finding = nullptr_findings[0]
+    assert finding["file"] == f"/workspace/{fixture_file}"
+    assert finding["line"] == 4
+    assert finding["severity"] == "warning"
+    assert "nullptr" in finding["message"].lower()

@@ -194,5 +194,35 @@ def lint_changed(base: str = "origin/main") -> dict[str, Any]:
         }
 
 
+@mcp.tool()
+def lint_file(path: str) -> dict[str, Any]:
+    """Lint a single file with clang-tidy, inside Docker.
+
+    Wraps tools/clang-tidy.py, pointed at build-docker/build-tests-docker
+    (the compile databases produced by the `build`/`test` tools above — run
+    those first if this reports a missing-compile-command error). `path`
+    must be an actual translation unit (a .c/.cpp), not a header.
+    """
+    ensure_image()
+
+    # --src-build-dir/--tests-build-dir must precede the positional path:
+    # clang-tidy.py's trailing REMAINDER positional (passthrough clang-tidy
+    # args) would otherwise swallow them if they came after the path.
+    proc = run_in_container(
+        f"python3 tools/clang-tidy.py --src-build-dir build-docker "
+        f"--tests-build-dir build-tests-docker {path}"
+    )
+    try:
+        return json.loads(proc.stdout)
+    except json.JSONDecodeError:
+        return {
+            "summary": {"status": "error", "total_errors": 0, "total_warnings": 0},
+            "findings": [],
+            "error": "tools/clang-tidy.py did not print valid JSON",
+            "exit_code": proc.returncode,
+            "log_tail": tail(proc.stdout + "\n" + proc.stderr),
+        }
+
+
 if __name__ == "__main__":
     mcp.run()
