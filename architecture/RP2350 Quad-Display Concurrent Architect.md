@@ -11,14 +11,15 @@ left genuinely open is the physical board pinout (§2), which doesn't affect the
 
 The codebase already has an `SpiBus` concept (`src/shared/hal/spi_bus_concept.h`:
 `set_format(bits)`, `write_blocking(bytes, n)`, `write_dma(pixels, len)`, `busy()`) and an
-`ST7789<SpiT, CsPinT, DcPinT, RstPinT, DelayT>` driver (`src/shared/hal/drivers/st7789.h`)
-written purely against that concept — it already implements command-vs-pixel mode switching,
-CS/DC framing, and a polling `wait_idle()`/`is_busy()` pattern that deselects CS the moment a
-poll first observes the transfer has finished.
+`ST7789<SpiT, DcPinT, RstPinT, DelayT>` driver (`src/shared/hal/drivers/st7789.h`) written purely
+against that concept — it implements command-vs-pixel mode switching and a polling
+`wait_idle()`/`is_busy()` pattern. **`ST7789` has no CS notion at all** — this is a correction to
+this doc's original assumption (see the CS callout below, added after actually building and
+debugging `PioSpiBus` on hardware — see `.todo/pio_spi_state.md`).
 
 **Decision: the PIO+DMA transport is a new concrete implementation of `SpiBus` — `PioSpiBus`
-— not a parallel/replacement driver.** `ST7789<PioSpiBus, CsPinT, DcPinT, RstPinT, DelayT>` is
-used completely unchanged, one instance per display, each backed by a different PIO0 SM:
+— not a parallel/replacement driver.** `ST7789<PioSpiBus, DcPinT, RstPinT, DelayT>` is used
+completely unchanged, one instance per display, each backed by a different PIO0 SM:
 
 - `write_blocking()` → CPU writes the command byte(s) directly into that SM's TX FIFO (§4's
   command-mode path).
@@ -29,10 +30,30 @@ used completely unchanged, one instance per display, each backed by a different 
   stays uniform across `SpiBus` implementations.
 - `busy()` — see §5's polling decision.
 
-**CS needs no new design.** In the existing driver, CS is a plain `GpioOutputPinConcept`
-(`CsPinT`) that `ST7789` toggles itself — it isn't part of `SpiBus` at all. The source
-conversation's "CS unique per SM, toggled in software" requirement is already exactly this
-pattern; each display's `ST7789<PioSpiBus, ...>` instance just gets its own `CsPinT`.
+**CS is owned by the concrete `SpiBus` implementation, not `ST7789` — and for PIO this needed
+real design work, contradicting this doc's original "no new design" call.** This section
+originally assumed CS would stay a plain `GpioOutputPinConcept` that `ST7789` toggles itself, one
+per SM ("CS unique per SM, toggled in software" — the source conversation's requirement, taken at
+face value). That's since been superseded on two fronts:
+
+- `ST7789` was refactored to drop its CS template parameter/member entirely — CS isn't its
+  concern at any level now, for any `SpiT`.
+- Actually debugging `PioSpiBus` on hardware (`F:\git\electronics\pio-spi-bringup`, full findings
+  in `.todo/pio_spi_state.md`) found that a CPU-toggled CS GPIO has a genuine race against the PIO
+  SM: polling `TXSTALL`/FIFO-empty as a proxy for "the SM actually finished shifting" isn't
+  reliable, so software CS deasserts before the last byte finishes clocking out — this was the
+  root cause of `PioSpiBus`'s total non-response in that investigation. Unlike the native SPI1
+  path (where `SpiDmaBus` now hands CS to the PL022 peripheral itself, GPIO_FUNC_SPI on the CSn
+  alt-function pin, for free hardware-driven CS), PIO has no built-in CS concept, so there's
+  nothing to hand it off to.
+- **Identified fix (not yet implemented — see `.todo/pio_spi_state.md`'s "Next step"):** generate
+  CS as a second `side-set` bit driven by the SM itself, matching
+  `pico-examples/pio/spi/spi.pio`'s `spi_cpha1_cs` pattern (`pull ifempty side 0x2 [1]` — the
+  blocking `pull` that sets `TXSTALL` and the side-set that drives CS high happen on the same PIO
+  instruction, so completion-detection and CS's electrical state can't drift apart by
+  construction). This means §3's "dumb serializer" program below needs extending to a 2-bit
+  side-set (SCL + CS) with manual `pull`/`jmp !osre` control instead of autopull — not yet done in
+  either `pio-spi-bringup` or here.
 
 ## 1. Core decision: one PIO block, four State Machines
 
@@ -48,7 +69,7 @@ pattern; each display's `ST7789<PioSpiBus, ...>` instance just gets its own `CsP
 |---|---|---|
 | SCL (clock) | Unique per SM | Driven via that SM's `side-set` pin. **Never shared** — concurrent SMs toggling a shared clock line would collide/garble. |
 | SDA (data) | Unique per SM | Driven via that SM's `out` pin. |
-| CS (chip select) | Unique per SM | |
+| CS (chip select) | Unique per SM | Driven via that SM's second `side-set` bit, not a CPU-toggled GPIO — see §0's CS callout for why a software-toggled pin doesn't work here. |
 | DC (data/command) | Unique per SM | |
 | RESET | **Shared** across all 4 displays | One GPIO, toggled once at boot. |
 | Backlight PWM | **Shared** across all 4 displays | One PWM channel/GPIO, tied like RESET — no per-display brightness requirement exists. |
@@ -169,6 +190,8 @@ in a follow-up `/grilling` session (2026-07-25) and resolved:
    avoided ahead of a multi-display future, i.e. now). Resolved: `PioSpiBus::busy()` stays a pure
    poll (§0, §5) — no IRQ anywhere, keeping the existing no-IRQ rationale intact at 4 displays.
 2. **Relationship to `SpiBus` → `PioSpiBus` implements it, `ST7789` unchanged.** Resolved in §0.
+   The CS half of this (originally "no new design needed") was later revised after hardware
+   debugging found a real software/SM race — see §0's CS callout and §2's CS row.
 3. **Final GPIO pin assignments → left as an explicit TBD**, not a design gap (§2): a board-
    wiring decision, not something that changes the PIO/DMA architecture.
 4. **Backlight PWM sharing → confirmed shared**, one PWM line tied like RESET (§2).
