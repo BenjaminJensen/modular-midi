@@ -7,7 +7,8 @@
 #include "logger_instance.h"
 #include "display.h"
 #include "st7789.h"
-#include "pio_spi_bus.h"
+#include "hardware/spi.h"
+#include "spi_dma_bus.h"
 #include "output_pin.h"
 #include "pico_delay.h"
 #include "shared/services/button_service.h"
@@ -18,24 +19,32 @@
 #include "shared/hal/rp2350/render_engine.h"
 #include "shared/render/mailbox.h"
 
-// Display hw: PIO0 SM0 (SDA/SCL) + CS/DC/RST pins matching the panel's wiring
-// on this board - same pins the SPI1-based SpiDmaBus used to drive
-// (see architecture/RP2350 Quad-Display Concurrent Architecture.md).
-static PioSpiBus display_spi(pio0, 0, 11, 10, 10 * 1000 * 1000);
-static OutputPin display_cs(9);
+// Display hw: SPI1 (SCK=GPIO10, TX=GPIO11) + DC/RST pins matching the
+// panel's wiring on this board (see
+// architecture/RP2350 Quad-Display Concurrent Architecture.md).
+// PioSpiBus (PIO0+DMA transport) is parked for now - see
+// .todo/pio_spi_state.md.
+//
+// CS (GPIO9 = SPI1's CSn alternate-function pin) is hardware-driven by
+// SpiDmaBus itself (see spi_dma_bus.h) instead of a software-toggled
+// GpioOutputPin - this closes a CPU/SM synchronization race identified while
+// debugging PioSpiBus's CS timing (CS and the SPI shift clock are driven by
+// the same peripheral, not bridged by a software poll loop). ST7789 has no
+// CS notion at all - it's templated only on DC/RST.
+static SpiDmaBus display_spi(spi1, 10, 11, 9, 10 * 1000 * 1000);
 static OutputPin display_dc(8);
 static OutputPin display_rst(12);
 static PicoDelay display_delay;
-static ST7789<PioSpiBus, OutputPin, OutputPin, OutputPin, PicoDelay> st7789(
-    display_spi, display_cs, display_dc, display_rst, display_delay);
-static Display<ST7789<PioSpiBus, OutputPin, OutputPin, OutputPin, PicoDelay>, RttSink> display(st7789, g_log);
+static ST7789<SpiDmaBus, OutputPin, OutputPin, PicoDelay> st7789(
+    display_spi, display_dc, display_rst, display_delay);
+static Display<ST7789<SpiDmaBus, OutputPin, OutputPin, PicoDelay>, RttSink> display(st7789, g_log);
 
 // Cross-core Mailbox for Render Engine label updates (see architecture/EVENT_SYSTEM.md,
 // docs/adr/0001). Sized for the full 4-display hardware spec even though only display 0
 // is wired up below - display_ids 1-3 simply stay untouched until those displays exist.
 static constexpr uint8_t NUM_DISPLAYS = 4;
 static Mailbox<NUM_DISPLAYS> render_mailbox;
-static RenderEngine<ST7789<PioSpiBus, OutputPin, OutputPin, OutputPin, PicoDelay>, RttSink, NUM_DISPLAYS>
+static RenderEngine<ST7789<SpiDmaBus, OutputPin, OutputPin, PicoDelay>, RttSink, NUM_DISPLAYS>
     render_engine(display, render_mailbox, 0);
 
 static FreeRTOSTaskRunner<512> button_runner("ButtonService", 1);

@@ -36,7 +36,9 @@ bool tx_stalled(PIO pio, uint sm) {
 
 // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 PioSpiBus::PioSpiBus(PIO pio, uint sm, uint sda_pin, uint scl_pin, uint32_t scl_hz)
-    : m_pio(pio), m_sm(sm), m_dma_channel(dma_claim_unused_channel(true)) {
+    : m_pio(pio), m_sm(sm),
+      m_swap_dma_channel(dma_claim_unused_channel(true)),
+      m_stream_dma_channel(dma_claim_unused_channel(true)) {
     pio_sm_claim(m_pio, m_sm);
     uint offset = ensure_program_loaded(m_pio);
 
@@ -44,24 +46,26 @@ PioSpiBus::PioSpiBus(PIO pio, uint sm, uint sda_pin, uint scl_pin, uint32_t scl_
     float clkdiv = static_cast<float>(clock_get_hz(clk_sys)) / (4.0f * static_cast<float>(scl_hz));
     st7789_8bit_program_init(m_pio, m_sm, offset, sda_pin, scl_pin, clkdiv);
 
-    dma_channel_config c = dma_channel_get_default_config(m_dma_channel);
-    channel_config_set_transfer_data_size(&c, DMA_SIZE_16);
-    channel_config_set_bswap(&c, true); // RGB565-endianness-vs-byte-oriented-SPI fixup (doc §4)
-    channel_config_set_dreq(&c, pio_get_dreq(m_pio, m_sm, true));
-    // The SM is shift-left/MSB-first with an 8-bit autopull threshold (see
-    // st7789_spi.pio), so a 16-bit-wide DMA beat must land in the FIFO
-    // word's *upper* halfword - the SM shifts out whatever's on the MSB
-    // side of the OSR first. txf[sm] is 32-bit and word-aligned; the cast
-    // below targets its upper 16 bits (byte offset +2), not the lower
-    // (default) half a plain uint32_t* would hit.
-    auto* txf_hi = reinterpret_cast<volatile uint16_t*>(&m_pio->txf[m_sm]) + 1;
+    // Stage 2's destination never changes call-to-call: txf[sm]'s base
+    // address, narrow (8-bit) writes only - relying on RP2040/2350's IO
+    // fabric replicating a narrow store across all four byte lanes of the
+    // bus transaction (confirmed against Raspberry Pi's own pico-examples
+    // pio/st7789_lcd/st7789_lcd.pio, which uses this exact technique via
+    // `*(volatile uint8_t*)&pio->txf[sm] = x`). There's no specific byte
+    // lane to target - a +3 offset (targeting what I mistakenly assumed was
+    // "the MSB lane") isn't how this works and doesn't reliably land the
+    // value where the shift-left SM reads from.
+    auto* txf_byte = reinterpret_cast<volatile uint8_t*>(&m_pio->txf[m_sm]);
+    dma_channel_config stream_c = dma_channel_get_default_config(m_stream_dma_channel);
+    channel_config_set_transfer_data_size(&stream_c, DMA_SIZE_8);
+    channel_config_set_dreq(&stream_c, pio_get_dreq(m_pio, m_sm, true));
     dma_channel_configure(
-        m_dma_channel,
-        &c,
-        txf_hi,  // Write to this SM's TX FIFO (upper halfword lane)
-        nullptr, // Read address is set per-transfer in write_dma()
-        0,       // Transfer count is set per-transfer in write_dma()
-        false    // Don't start immediately
+        m_stream_dma_channel,
+        &stream_c,
+        txf_byte, // Write to this SM's TX FIFO (narrow byte write)
+        nullptr,      // Read address is set per-transfer in write_dma()
+        0,            // Transfer count is set per-transfer in write_dma()
+        false         // Don't start immediately
     );
 }
 
@@ -91,11 +95,31 @@ void PioSpiBus::write_blocking(const uint8_t* data, size_t len) {
 }
 
 void PioSpiBus::write_dma(const uint16_t* data, size_t len) {
+    // Stage 1: RAM-to-RAM byte-swap pre-pass. Both ends are plain memory (not
+    // a FIFO push register), so there's no ambiguity about narrow-write
+    // justification here - a straightforward DMA_SIZE_16+BSWAP transfer.
+    // Blocking on this is fine: it's pure SRAM-to-SRAM bandwidth, not
+    // throttled by the ~10 MHz SCL rate that dominates stage 2's runtime.
+    dma_channel_config swap_c = dma_channel_get_default_config(m_swap_dma_channel);
+    channel_config_set_transfer_data_size(&swap_c, DMA_SIZE_16);
+    channel_config_set_bswap(&swap_c, true); // RGB565-endianness-vs-byte-oriented-SPI fixup (doc §4)
+    // dma_channel_get_default_config() defaults write_increment to false -
+    // correct for stage 2's fixed FIFO destination, but wrong here: this is
+    // a RAM-to-RAM buffer copy, so the destination must advance too, or
+    // every transfer overwrites m_swapped[0] and the rest of the buffer
+    // never gets touched.
+    channel_config_set_write_increment(&swap_c, true);
+    dma_channel_configure(m_swap_dma_channel, &swap_c, m_swapped.data(), data, len, true);
+    dma_channel_wait_for_finish_blocking(m_swap_dma_channel);
+
+    // Stage 2: stream the now-swapped bytes into the PIO FIFO one byte per
+    // DMA beat - the same granularity the CPU command path uses, so the
+    // SM's 8-bit autopull threshold is never fed more than it can consume.
     clear_tx_stall(m_pio, m_sm);
-    dma_channel_set_read_addr(m_dma_channel, data, false);
-    dma_channel_set_trans_count(m_dma_channel, len, true); // true triggers the transfer
+    dma_channel_set_read_addr(m_stream_dma_channel, m_swapped.data(), false);
+    dma_channel_set_trans_count(m_stream_dma_channel, len * 2, true); // *2: bytes, not pixels
 }
 
 bool PioSpiBus::busy() const {
-    return dma_channel_is_busy(m_dma_channel) || !tx_stalled(m_pio, m_sm);
+    return dma_channel_is_busy(m_stream_dma_channel) || !tx_stalled(m_pio, m_sm);
 }

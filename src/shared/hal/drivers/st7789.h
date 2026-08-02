@@ -9,18 +9,18 @@
 
 /*
     Hardware driver for the ST7789 display controller. Templated on the SPI
-    bus, the three GPIO output pins (CS/DC/RST), and a blocking delay source,
+    bus, the two GPIO output pins (DC/RST), and a blocking delay source,
     all injected by reference so the glue layer (main.cpp) owns and wires
     them - no pico-sdk dependency at all here, direct or transitive.
     Deliberately has no knowledge of LVGL: callers hand it raw pixel data
-    plus a rectangle, nothing more.
+    plus a rectangle, nothing more. CS is not this driver's concern - the
+    concrete SpiBus implementation owns it in hardware (see SpiDmaBus).
 
-    Completion of the async pixel-burst DMA transfer is polled, not interrupt-
-    driven: is_busy() checks the underlying bus and, the moment it notices a
-    transfer just finished, deselects CS itself. This is the only place that
-    bookkeeping happens, so both the blocking waits used internally (before
-    issuing a new command) and an external caller polling for "is my last
-    flush done yet" share one source of truth.
+    Completion of the async pixel-burst DMA transfer is polled, not
+    interrupt-driven: is_busy() just checks the underlying bus, so both the
+    blocking waits used internally (before issuing a new command) and an
+    external caller polling for "is my last flush done yet" share one
+    source of truth.
 
     Must be given static storage duration - construct only as a `static`
     object in the glue layer (main.cpp), same as every other HAL/Service
@@ -29,15 +29,15 @@
     compile-time guard against stack use, so this is enforced by convention
     and code review, not the type system.
 */
-template<SpiBus SpiT, GpioOutputPin CsPinT, GpioOutputPin DcPinT, GpioOutputPin RstPinT, Delay DelayT>
+template<SpiBus SpiT, GpioOutputPin DcPinT, GpioOutputPin RstPinT, Delay DelayT>
 class ST7789 {
 public:
     void* operator new(size_t) = delete;
     void* operator new[](size_t) = delete;
 
-    ST7789(SpiT& spi, CsPinT& cs, DcPinT& dc, RstPinT& rst, DelayT& delay,
+    ST7789(SpiT& spi, DcPinT& dc, RstPinT& rst, DelayT& delay,
            uint16_t y_offset = 82, uint16_t x_offset = 18)
-        : m_spi(spi), m_cs(cs), m_dc(dc), m_rst(rst), m_delay(delay),
+        : m_spi(spi), m_dc(dc), m_rst(rst), m_delay(delay),
           m_y_offset(y_offset), m_x_offset(x_offset) {}
 
     void init() {
@@ -72,20 +72,15 @@ public:
         set_memory_write();
 
         m_spi.set_format(16);
-        m_cs.write(false);
         m_dc.write(true);
         m_spi.write_dma(data, len);
         m_transfer_pending = true;
     }
 
-    // True if a previously started pixel-burst DMA transfer is still in
-    // flight. Has a side effect: the first call after the transfer actually
-    // finishes deselects CS, so this doubles as the "finalize" step - callers
-    // don't need a separate completion hook.
+    // True if a previously started pixel-burst DMA transfer is still in flight.
     bool is_busy() {
         bool still_busy = m_spi.busy();
         if (!still_busy && m_transfer_pending) {
-            m_cs.write(true);
             m_transfer_pending = false;
         }
         return still_busy;
@@ -93,7 +88,6 @@ public:
 
 private:
     SpiT& m_spi;
-    CsPinT& m_cs;
     DcPinT& m_dc;
     RstPinT& m_rst;
     DelayT& m_delay;
@@ -139,20 +133,16 @@ private:
     void send_cmd(uint8_t cmd) {
         wait_idle();
         m_spi.set_format(8);
-        m_cs.write(false);
         m_dc.write(false); // DC low for command
         m_spi.write_blocking(&cmd, 1);
-        m_cs.write(true);
         m_spi.set_format(16);
     }
 
     void send_data(uint8_t data) {
         wait_idle();
         m_spi.set_format(8);
-        m_cs.write(false);
         m_dc.write(true); // DC high for data
         m_spi.write_blocking(&data, 1);
-        m_cs.write(true);
         m_spi.set_format(16);
     }
 
@@ -167,7 +157,6 @@ private:
         const auto y2a = static_cast<uint16_t>(m_y_offset + y2);
 
         m_spi.set_format(8);
-        m_cs.write(false);
 
         m_dc.write(false); // CASET
         uint8_t caset = 0x2A;
@@ -189,7 +178,6 @@ private:
         };
         m_spi.write_blocking(y_bytes.data(), y_bytes.size());
 
-        m_cs.write(true);
         m_spi.set_format(16);
     }
 };

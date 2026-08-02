@@ -3,16 +3,19 @@
 #include "hardware/dma.h"
 #include "hardware/gpio.h"
 
-// sck_pin/tx_pin are peripheral identity params per HAL.md, not logically
-// interchangeable despite the shared type.
+// sck_pin/tx_pin/cs_pin are peripheral identity params per HAL.md, not
+// logically interchangeable despite the shared type.
 // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
-SpiDmaBus::SpiDmaBus(spi_inst_t* spi, uint sck_pin, uint tx_pin, uint32_t baudrate)
+SpiDmaBus::SpiDmaBus(spi_inst_t* spi, uint sck_pin, uint tx_pin, uint cs_pin, uint32_t baudrate)
     : m_spi(spi), m_dma_channel(dma_claim_unused_channel(true)) {
     spi_init(m_spi, baudrate);
     set_format(16);
 
     gpio_set_function(sck_pin, GPIO_FUNC_SPI);
     gpio_set_function(tx_pin, GPIO_FUNC_SPI);
+    // Hand CS to the PL022 peripheral itself (see header comment) instead of
+    // leaving it as a plain SIO-driven GpioOutputPin.
+    gpio_set_function(cs_pin, GPIO_FUNC_SPI);
 
     dma_channel_config c = dma_channel_get_default_config(m_dma_channel);
     channel_config_set_transfer_data_size(&c, DMA_SIZE_16);

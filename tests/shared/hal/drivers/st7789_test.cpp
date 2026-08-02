@@ -9,14 +9,14 @@
 #include "mocks/fake_delay.h"
 
 namespace {
-    using Driver = ST7789<FakeSpiBus, FakeOutputPin, FakeOutputPin, FakeOutputPin, FakeDelay>;
+    using Driver = ST7789<FakeSpiBus, FakeOutputPin, FakeOutputPin, FakeDelay>;
 
     // operator new being deleted is a compile-time property - a runtime CHECK can't
     // observe it, so this asserts on it directly via a requires-expression instead.
     // Guards against a future refactor silently dropping the `= delete`.
     template<typename T>
     concept HeapConstructible = requires(FakeSpiBus& spi, FakeOutputPin& pin, FakeDelay& delay) {
-        new T(spi, pin, pin, pin, delay);
+        new T(spi, pin, pin, delay);
     };
     static_assert(!HeapConstructible<Driver>,
                   "ST7789 must stay non-heap-constructible (operator new is deleted for the no-heap-anywhere rule)");
@@ -24,9 +24,9 @@ namespace {
 
 TEST_CASE("update() starts exactly one DMA write with the given data and length") {
     FakeSpiBus spi;
-    FakeOutputPin cs, dc, rst;
+    FakeOutputPin dc, rst;
     FakeDelay delay;
-    Driver driver(spi, cs, dc, rst, delay);
+    Driver driver(spi, dc, rst, delay);
 
     std::array<uint16_t, 4> pixels = {1, 2, 3, 4};
     driver.update(pixels.data(), pixels.size(), 0, 0, 1, 1);
@@ -36,50 +36,40 @@ TEST_CASE("update() starts exactly one DMA write with the given data and length"
     CHECK(spi.last_dma_len == pixels.size());
 }
 
-TEST_CASE("update() leaves CS asserted and DC high for the pixel burst") {
+TEST_CASE("update() leaves DC high for the pixel burst") {
     FakeSpiBus spi;
-    FakeOutputPin cs, dc, rst;
+    FakeOutputPin dc, rst;
     FakeDelay delay;
-    Driver driver(spi, cs, dc, rst, delay);
+    Driver driver(spi, dc, rst, delay);
 
     std::array<uint16_t, 1> pixels = {0};
     driver.update(pixels.data(), pixels.size(), 0, 0, 0, 0);
 
-    CHECK_FALSE(cs.level); // asserted (active low)
-    CHECK(dc.level);       // data mode
+    CHECK(dc.level); // data mode
     CHECK(spi.last_format == 16);
 }
 
-TEST_CASE("is_busy() reflects the bus and deselects CS exactly once on completion") {
+TEST_CASE("is_busy() reflects the bus") {
     FakeSpiBus spi;
-    FakeOutputPin cs, dc, rst;
+    FakeOutputPin dc, rst;
     FakeDelay delay;
-    Driver driver(spi, cs, dc, rst, delay);
+    Driver driver(spi, dc, rst, delay);
 
     std::array<uint16_t, 1> pixels = {0};
     driver.update(pixels.data(), pixels.size(), 0, 0, 0, 0);
-    REQUIRE_FALSE(cs.level); // still selected right after starting the transfer
 
     spi.busy_polls_remaining = 2;
     CHECK(driver.is_busy());
-    CHECK_FALSE(cs.level); // still busy, still selected
-
     CHECK(driver.is_busy());
-    CHECK_FALSE(cs.level);
-
     CHECK_FALSE(driver.is_busy()); // now idle
-    CHECK(cs.level);               // deselected the moment completion was noticed
-
-    int writes_before = cs.write_count;
-    CHECK_FALSE(driver.is_busy()); // calling again shouldn't re-toggle CS
-    CHECK(cs.write_count == writes_before);
+    CHECK_FALSE(driver.is_busy()); // calling again stays idle
 }
 
 TEST_CASE("update() waits for a prior transfer to finish before starting the next one") {
     FakeSpiBus spi;
-    FakeOutputPin cs, dc, rst;
+    FakeOutputPin dc, rst;
     FakeDelay delay;
-    Driver driver(spi, cs, dc, rst, delay);
+    Driver driver(spi, dc, rst, delay);
 
     std::array<uint16_t, 1> pixels = {0};
     driver.update(pixels.data(), pixels.size(), 0, 0, 0, 0);
@@ -93,9 +83,9 @@ TEST_CASE("update() waits for a prior transfer to finish before starting the nex
 
 TEST_CASE("set_window frames CASET/RASET with the configured x/y offsets") {
     FakeSpiBus spi;
-    FakeOutputPin cs, dc, rst;
+    FakeOutputPin dc, rst;
     FakeDelay delay;
-    Driver driver(spi, cs, dc, rst, delay, /*y_offset=*/82, /*x_offset=*/18);
+    Driver driver(spi, dc, rst, delay, /*y_offset=*/82, /*x_offset=*/18);
 
     std::array<uint16_t, 1> pixels = {0};
     driver.update(pixels.data(), pixels.size(), /*x1=*/0, /*y1=*/0, /*x2=*/1, /*y2=*/1);
@@ -110,9 +100,9 @@ TEST_CASE("set_window frames CASET/RASET with the configured x/y offsets") {
 
 TEST_CASE("zero offsets are honored in set_window's CASET/RASET framing") {
     FakeSpiBus spi;
-    FakeOutputPin cs, dc, rst;
+    FakeOutputPin dc, rst;
     FakeDelay delay;
-    Driver driver(spi, cs, dc, rst, delay, /*y_offset=*/0, /*x_offset=*/0);
+    Driver driver(spi, dc, rst, delay, /*y_offset=*/0, /*x_offset=*/0);
 
     std::array<uint16_t, 1> pixels = {0};
     driver.update(pixels.data(), pixels.size(), 0, 0, 1, 1);
@@ -127,9 +117,9 @@ TEST_CASE("zero offsets are honored in set_window's CASET/RASET framing") {
 
 TEST_CASE("init() sends the documented ST7789 init command sequence") {
     FakeSpiBus spi;
-    FakeOutputPin cs, dc, rst;
+    FakeOutputPin dc, rst;
     FakeDelay delay;
-    Driver driver(spi, cs, dc, rst, delay);
+    Driver driver(spi, dc, rst, delay);
 
     driver.init();
 
@@ -145,9 +135,9 @@ TEST_CASE("init() sends the documented ST7789 init command sequence") {
 
 TEST_CASE("init() pulses RST and waits the documented settle times") {
     FakeSpiBus spi;
-    FakeOutputPin cs, dc, rst;
+    FakeOutputPin dc, rst;
     FakeDelay delay;
-    Driver driver(spi, cs, dc, rst, delay);
+    Driver driver(spi, dc, rst, delay);
 
     driver.init();
 
@@ -157,9 +147,9 @@ TEST_CASE("init() pulses RST and waits the documented settle times") {
 
 TEST_CASE("display_on() sends DISPON and waits 100ms") {
     FakeSpiBus spi;
-    FakeOutputPin cs, dc, rst;
+    FakeOutputPin dc, rst;
     FakeDelay delay;
-    Driver driver(spi, cs, dc, rst, delay);
+    Driver driver(spi, dc, rst, delay);
 
     driver.display_on();
 
